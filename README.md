@@ -20,10 +20,10 @@ The 3 byte address space is split in two :
 - First part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 0) is further divided into two subspaces  
   - The first subspace is for the remainder of the primary dictionary (it has 333 333 tokens)
   - And the second subspace holds an Ngram dictionary (more on that later)
-- Seoncd part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 1) is further divided into two subspaces  
-  -First part is for a session dictionary. A session dictionary is used to hold repeating unknown tokens. there are 2097152 - 5
+- Second part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 1) is further divided into two subspaces  
+  - First part is for a session dictionary. A session dictionary is used to hold repeating unknown tokens. there are 2097152 - 5
   codes available.
-  -Second part is only 5 codes, (TODO, for now just 1 code, and switch between Huffmann and no compression is done in a bool parameter) It is an escape sequence meaning that following bytes will be encoded
+  - Second part is only 5 codes, (TODO, for now just 1 code, and switch between Huffmann and no compression is done in a bool parameter) It is an escape sequence meaning that following bytes will be encoded
     - first code : As a stream of chars (no compression) + plus a C style termination (chr(0))
     - second code : Huffmann encoding, lowercase only
     - third code : Huffmann, lowercase + uppercase or uppercase only

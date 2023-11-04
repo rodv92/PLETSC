@@ -34,7 +34,7 @@ The 3 byte address space is split in two :
 
 
 
-Performance :
+# Performance :
 
 It offers a good compression ratio (between 2.6 and 3.0+), That is, Sizes in % of ORIGINAL size of around 33% to 38%, mainly depending on the lexical complexity or lexical archaism of the source text, and presence of unkwnown or misspelled words.
 
@@ -50,8 +50,19 @@ This is why this algorithm is intended for stream compression (on the fly). Howe
 
 It is fast and quite simple. around 1200 LOC.
 
-Input text file must be ASCII or UTF-8 decodable to ASCII (English). It ignores conversion errors.
+# Dependecies 
+
+These Python modules are required :
+
+codecs, nltk, re, bitstring, bitarray, struct, time, dahuffman
+
+# Requirements
+
+Input text file must be ASCII (for now) or UTF-8 decodable to ASCII (English). It ignores conversion errors.
 Decoded file will be encoded in ASCII.
+It should be in English to get adequate conversion.
+
+# Information about the dictionaries
 
 The primary dictionary is based on the "count_1w.txt" english dictionary of 333 333 words, (words ordered by lexical prevalence) tweaked with added special characters also listed by order of prevalence and added english contractions, and with word count number stripped off.
 
@@ -64,31 +75,33 @@ Ngrams of less than 4 words are deemed not interesting as the first pass will us
 
 Compression and decompression require the primary dictionary to be available, and the secondary if the boolean SecondPass is set to true, (by default).
 
+**The zip "dics.zip" already have a compiled version of these dictionaries.**
+
+# More information
+
 The algorithm is heavily commented in the code.
 
-Main applications could be messaging over low bandwidth links like POCSAG radio text, or JS8Call for HAM radio.
+# Field of application
+
+Main applications could be messaging over low bandwidth links like POCSAG radio text, or JS8Call for HAM radio, and IoT.
 
 However, note that the underlying digital mode should allow binary transmission (not only transmission of printable ASCII characters) for seamless integration.
 
-TODO and ISSUES :
-See comments in the code
+# TODO and ISSUES :
+
+See comments in the code.
 
 Main issues for now are syntactic rules and spurious whitespaces, absence of whitespaces were they should have been,
 problems with hyphenated tokens, spurious newlines, problems with some possessive forms, and special constructs
 besides emails and well formed URLs.
 
-Dictionaries :
+# Ngrams Processing from scratch :
 
-As said before there are two dictionaries :
-- Primary dictionary is count_1w.txt
-- Secondary is outngrams.bin
+Useful if you want to tweak or create your own dictionaries, we'll discuss mainly the outngrams.bin dictionary,
+as count_1w.txt tweaking is straightforward.
+Note that count1_w.txt should not be modified once outngrams.bin is generated, or you'll have to rebuild outngrams.bin
 
-The zip "dics.zip" already have a compiled version of these dictionaries.
-
-
-Ngrams Processing from scratch :
-
-A preparatory step is required to generate a compressed version of the ngrams files, if you want to do it from scratch.
+A preparatory step is required to generate a compressed version of the ngrams files, if you want to do it from scratch :
 
 First create the ngrams CSV using this code repo :
 https://github.com/orgtre/google-books-ngram-frequency/tree/main/python
@@ -97,7 +110,9 @@ The repo contains scripts that perform the download and concatenation of ngrams 
 Note that LETSC has limited space in the first subspace of the 3 byte. more or less 2097152 - 333333
 I have created an ngram list of 1571125 ngrams. The distribution between the 4grams and 5grams is roughly 50%/50%
 
-Note that the  The resulting CSV files need to be further processed by our algorithm
+The resulting CSV files need to be further processed by our algorithm
 
 The script that create outngrams.bin (the secondary compiled dictionary based on the primary dictionary and the ngrams csv files from google-books-ngram) is called ngrams_format_dic.py
+This script is commented for what each line does.
+
 EOF

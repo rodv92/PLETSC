@@ -56,7 +56,8 @@ The 3 byte address space is split in two :
   - And the second subspace holds an Ngram dictionary (more on that later).
 - Second part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 1) is further divided into two subspaces.
   - First part is for a session dictionary. A session dictionary is used to hold repeating unknown tokens. there are 2097152 - 5
-  codes available.
+  codes available for this use. Initially empty. Kept in ram, it is a SESSION dictionary. This session dictionary should not
+  be required to be sent between two parties, as it can be reconstructed entirely from the compressed stream.
   - Second part is only 5 codes, (TODO, for now just 1 code, and switch between Huffmann and no compression is done in a bool parameter) It is an escape sequence meaning that following bytes will be encoded wit the following methods :
     - first code : As a stream of chars (no compression), plus a C style termination (chr(0)).
     - second code : Huffmann encoding, lowercase only.

@@ -2,32 +2,33 @@
 Pedantic lightweight english text stream compression
 
 This script is useful for ASCII English text stream compression.
-It's pedantic because its final goal is to enforce English syntactic rules. such as whitespace after "," but not before, Capitalization after a "." etc... (but not grammar)
-Spell check will probably be recommended but should probably be done upstream by another applicative layer,
+It's pedantic because its final goal is to enforce a minima some English syntactic rules, such as whitespace after "," but not before, Capitalization after a "." etc... (but not grammar).
+Spell check will probably be recommended but should probably be done upstream (by another applicative layer),
 as it will ensure a better compression ratio - since it is based on words of the english dictionary.
 
 Its compression method is primarily based on a token (words and punctuation) dictionary.
-It leverages statistical prevalence of modern english words,
-Words of the primary dictionary are sorted from most used to least used.
-The line number is used as an index. (+1) index 0 is reserved for whitespace.
+It leverages statistical prevalence of modern english words:
+
+- Words of the primary dictionary are sorted from most used to least used.
+- The line number is used as an index. (+1) index 0 is reserved for whitespace.
 
 It also uses adaptive length encoding (1-2-3 bytes)
 First 128 most used tokens are encoded on 1 byte,
-next 16384 + 128 on 2 bytes
-next 2097152 + 16384 + 128 on 3 bytes.
+Next 16384 + 128 on 2 bytes.
+Next 2097152 + 16384 + 128 on 3 bytes.
 
 The 3 byte address space is split in two :
-- First part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 0) is further divided into two subspaces  
-  - The first subspace is for the remainder of the primary dictionary (it has 333 333 tokens)
-  - And the second subspace holds an Ngram dictionary (more on that later)
-- Second part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 1) is further divided into two subspaces  
+- First part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 0) is further divided into two subspaces. 
+  - The first subspace is for the remainder of the primary dictionary (it has 333 333 tokens).
+  - And the second subspace holds an Ngram dictionary (more on that later).
+- Second part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 1) is further divided into two subspaces.
   - First part is for a session dictionary. A session dictionary is used to hold repeating unknown tokens. there are 2097152 - 5
   codes available.
-  - Second part is only 5 codes, (TODO, for now just 1 code, and switch between Huffmann and no compression is done in a bool parameter) It is an escape sequence meaning that following bytes will be encoded
-    - first code : As a stream of chars (no compression) + plus a C style termination (chr(0))
-    - second code : Huffmann encoding, lowercase only
-    - third code : Huffmann, lowercase + uppercase or uppercase only
-    - fourth code : Huffmann, lowercase + uppercase + numbers, or numbers only
+  - Second part is only 5 codes, (TODO, for now just 1 code, and switch between Huffmann and no compression is done in a bool parameter) It is an escape sequence meaning that following bytes will be encoded wit the following methods :
+    - first code : As a stream of chars (no compression), plus a C style termination (chr(0)).
+    - second code : Huffmann encoding, lowercase only.
+    - third code : Huffmann, lowercase + uppercase or uppercase only.
+    - fourth code : Huffmann, lowercase + uppercase + numbers, or numbers only.
     - fifth code : All printable ASCII space, mainly for passwords.
     Each of these codes tells what Huffmann tree to use.
 
@@ -35,7 +36,7 @@ The 3 byte address space is split in two :
 
 Performance :
 
-It offers a good compression ratio (between 2.6 and 3.0+), That is, Sizes in % of ORIGINAL size of around 33% to 38%, mainly depending on the lexical complexity or lexical archaism of the source text, and presence of unkwnown or misspelled words
+It offers a good compression ratio (between 2.6 and 3.0+), That is, Sizes in % of ORIGINAL size of around 33% to 38%, mainly depending on the lexical complexity or lexical archaism of the source text, and presence of unkwnown or misspelled words.
 
 A higher lexical complexity, or archaic texts, that is, if the input text uses less common words – based on current usage – (2023), will yield lower compression ratios.
 
@@ -61,7 +62,7 @@ It also features a secondary (optional) compression pass based on a compiled dic
 It features compression for 4 and 5 word ngrams found in the first compression step stream.
 Ngrams of less than 4 words are deemed not interesting as the first pass will usually encode them on 3 bytes, the same sized as a compressed ngram.
 
-Compression and decompression require the primary dictionary to be available, and the secondary if the boolean SecondPass is set to true. (by default)
+Compression and decompression require the primary dictionary to be available, and the secondary if the boolean SecondPass is set to true, (by default).
 
 The algorithm is heavily commented in the code.
 
@@ -79,12 +80,14 @@ besides emails and well formed URLs.
 Dictionaries :
 
 As said before there are two dictionaries :
-Primary dictionary is count_1w.txt
-Secondary is outngrams.bin
+- Primary dictionary is count_1w.txt
+- Secondary is outngrams.bin
 
-The zip "dics.zip" already have a compiled version :
+The zip "dics.zip" already have a compiled version of these dictionaries.
+
 
 Ngrams Processing from scratch :
+
 A preparatory step is required to generate a compressed version of the ngrams files, if you want to do it from scratch.
 
 First create the ngrams CSV using this code repo :
@@ -97,3 +100,4 @@ I have created an ngram list of 1571125 ngrams. The distribution between the 4gr
 Note that the  The resulting CSV files need to be further processed by our algorithm
 
 The script that create outngrams.bin (the secondary compiled dictionary based on the primary dictionary and the ngrams csv files from google-books-ngram) is called ngrams_format_dic.py
+EOF

@@ -252,11 +252,13 @@ debug_on = True
 debug_ngrams_dic = False
 secondpass = True
 use_huffmann = False
+unknown_token_idx = 16384 + 128 + 2097152
+
 
 def debugw(strdebug):
     if (debug_on):
         print(strdebug)
-
+        
 
 def check_file_is_utf8(filename):
     debugw("checking encoding of:")
@@ -272,13 +274,19 @@ def check_file_is_utf8(filename):
         return False
 
 
-
 def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoken,gendic):
+  
+    
+    global unknown_token_idx
 
     try:
+
         # is the token in english dictionary ?
+        debugw("line_token:" + line_token)
         tokenid = engdictrev[line_token]
         subtokensid = [tokenid]
+
+        
     except:
         debugw("unknown word, special chars adjunct, or possessive form")
         # let's try to split the unknown word from possible adjunct special chars
@@ -297,6 +305,14 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             debugw("unknown word")
 
             #AMEND dictionary 
+            # add this unknown subtoken to a session dic so it can be recalled.
+            debugw("unknown word: " + subtokens[0] + " adding to session dic at id: " + str(unknown_token_idx))
+            debugw("unknown word, adding to session dic at id: " + str(unknown_token_idx))
+            
+            engdictrev[subtokens[0]] = unknown_token_idx
+            engdict[unknown_token_idx] = subtokens[0]
+            unknown_token_idx += 1
+                       
 
             subtokensid = [4194304 - 1] # subtoken code for unknown word escape sequence.                       
             #print(subtokensid)
@@ -323,6 +339,14 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
                     debugw("unknown subtoken")
                     #subtokenid = 4194304 - 1 # subtoken code for unknown word escape sequence.
                     subtokensid.append(4194304 - 1)
+                    # add this unknown subtoken to a session dic so it can be recalled.
+                    #AMEND dictionary 
+                    # add this unknown subtoken to a session dic so it can be recalled.
+                    debugw("unknown subtoken: " + subtoken + " adding to session dic at id: " + str(unknown_token_idx))
+                    debugw("unknown subtoken, adding to session dic at id: " + str(unknown_token_idx))
+                    engdictrev[subtoken] = unknown_token_idx
+                    engdict[unknown_token_idx] = subtoken
+                    unknown_token_idx += 1
                     #continue
     subtokenidx = 0
     for subtokenid in subtokensid:        
@@ -373,7 +397,7 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             compressed.append((c.tobytes())[1])
 
         #if(16384 +128 <= subtokenid < 4194304 - 1):
-        if(16384 +128 <= subtokenid < 2097152):
+        if(16384 +128 <= subtokenid < 2097152 + 16384 + 128):
 
 
             debugw("rare word")
@@ -407,6 +431,49 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             compressed.append((c.tobytes())[0])
             compressed.append((c.tobytes())[1])
             compressed.append((c.tobytes())[2])
+
+
+                #if(16384 +128 <= subtokenid < 4194304 - 1):
+        if(16384 +128 + 2097152 <= subtokenid < 4194304 - 5):
+
+
+            debugw("unknown word from session DIC")
+            
+            # remove offset
+            debugw(engdict[subtokenid])
+            subtokenid -= (2097152 + 16384 + 128)
+
+            #convert to bytes1 (array of 3 bytes)
+            bytes2 = subtokenid.to_bytes(3,byteorder='little')
+            debugw("".join([f"\\x{byte:02x}" for byte in bytes2]))
+
+            #convert to bitarray
+            c = bitarray(endian='little')
+            c.frombytes(bytes2)
+            debugw(c)
+            
+            # set msb of first byte to 1 and shift the bits above up.
+            c.insert(7,1)
+            debugw(c)
+
+            # set msb of second byte to 1 and shift the bits above up.
+            c.insert(15,1)
+            debugw(c)
+
+            # set msb of third byte to 1 and shift the bits above up.
+            c.insert(23,1)
+            debugw(c)
+
+
+            # remove three excess bits that arose from our shifts
+            del c[24:27:1]
+            debugw(c)
+            
+            # append our three tweaked bytes to the compressed bytearray
+            compressed.append((c.tobytes())[0])
+            compressed.append((c.tobytes())[1])
+            compressed.append((c.tobytes())[2])
+
 
         #if(subtokenid == (4194304 - 1)):
         if(subtokenid in range(4194300,4194304)):
@@ -536,8 +603,9 @@ def compress_second_pass(compressed):
             debugw("rare ext")
             idx += 3  
             index_jumps.append(3)
-            ngram_byte_length += 3
-        elif((compressed[idx] & 128) and (compressed[idx+1] & 128) and (compressed[idx+2] & 128)):
+            ngram_byte_length += 3     
+        elif((compressed[idx] == 255) and (compressed[idx+1] == 255) and (compressed[idx+2] == 255)):
+            # TODO : take into account 4 escape sequences instead of only one.
             #reset ngram_compressed
             char = compressed[idx+3]
             debugw("unknown token sequence detected")
@@ -555,6 +623,15 @@ def compress_second_pass(compressed):
             index_jumps.append(3 + idxchar)
             ngram_length -= 1
             reset_ngram = True
+         
+        elif((compressed[idx] & 128) and (compressed[idx+1] & 128) and (compressed[idx+2] & 128)):
+            # Session DIC space, breaks ngram construction.
+            debugw("session DIC space, we break ngram construction")
+            idx += 3
+            index_jumps.append(3)
+            ngram_length -= 1
+            reset_ngram = True
+    
 
         ngram_length += 1
         debugw("indexjumps=")
@@ -963,7 +1040,7 @@ def decompress_ngram_bytes(compressed):
     return detokenizer_ngram
 
 
-
+###INLINE START###
 
 #downloading tokenizer model if missing
 nltk.download('punkt')
@@ -980,6 +1057,7 @@ Lines = file1.readlines()
 count = 1
 engdict = {}
 engdictrev = {}
+
 
 # special case : byte val 0 is equal to new line.
 # TODO : make sure that windows CRLF is taken care of.
@@ -1074,8 +1152,6 @@ if (compress):
     #line_tokens.append("\n")
     #tokens = tokens + line_tokens
     debugw(tokens)
-    #quit()
-
     
     if (not gendic):
 
@@ -1097,6 +1173,12 @@ if (compress):
                 fh.write(compressed)
         else:
             sys.stdout.buffer.write(compressed)
+
+        for sessidx in range(2113664,unknown_token_idx):
+            debugw("session_index:" + str(sessidx))
+            debugw(engdict[sessidx])
+            debugw(engdictrev[engdict[sessidx]])
+            debugw("session_index:" + str(sessidx))
 
     fh.close()
 
@@ -1327,20 +1409,22 @@ else:
                     
                     # increment byte counter with step 3, we processed 3 bytes.
                 idx += 3
-            
-            elif((compressed[idx] & 128) and (compressed[idx+1] & 128) and (compressed[idx+2] & 128)):
+
+            elif((compressed[idx] == 255) and (compressed[idx+1] == 255) and (compressed[idx+2] == 255)):   
+            #elif((compressed[idx] & 128) and (compressed[idx+1] & 128) and (compressed[idx+2] & 128)):
+                # TODO manage 4 escape sequences
                 debugw("unknown word escape sequence detected")
                 #unknown word escape sequence detected.
                 char = compressed[idx+3]
-                str = ""
+                stra = ""
                 if(not use_huffmann):
                     idxchar = 0
                     while(char != 0):
                         debugw("char=")
                         debugw(char)
-                        str += chr(char)
+                        stra += chr(char)
                         debugw("printing string state=")
-                        debugw(str)
+                        debugw(stra)
                         idxchar += 1
                         char = compressed[idx+3 + idxchar]
                     debugw("termination char detected=")
@@ -1354,21 +1438,86 @@ else:
                         char = compressed[idx+3 + idxchar]
                     debugw("huffmann : termination char detected=")
                     debugw(char)
-                    str = codec.decode(bstr)    
+                    stra = codec.decode(bstr)    
+                
+                debugw("we append that unknown word in our session dic at idx: " + str(unknown_token_idx) + " since it may be recalled")
+                engdictrev[stra] = unknown_token_idx
+                engdict[unknown_token_idx] = stra
+                unknown_token_idx += 1
                 
                 
                 if(CharIsUpperCase == 2):
-                    detokenizer.append(str.capitalize())
+                    detokenizer.append(stra.capitalize())
                     detokenizer_idx += 1
                     CharIsUpperCase = 0
                 else:
-                    detokenizer.append(str)
+                    detokenizer.append(stra)
                     detokenizer_idx += 1 
                 if(CharIsUpperCase != 1):
                     detokenizer.append(" ") 
                     detokenizer_idx += 1
 
                 idx += 3 + idxchar
+            
+            elif((compressed[idx] & 128) and (compressed[idx+1] & 128) and (compressed[idx+2] & 128)):
+                
+                debugw("previously unknown word now in DIC, recall it")
+
+                chunk = compressed[idx:idx+3]
+
+                # populate bitarray from the three bytes
+                c = bitarray(endian='little')
+                #c.frombytes(compressed[idx:idx+3])
+                c.frombytes(chunk)
+                
+                debugw(c)
+
+                # remove third byte msb (shift down the bits above)
+                del c[23]
+                debugw(c)
+
+                # remove second byte msb (shift down the bits above)
+                del c[15]
+                debugw(c)
+
+                # remove first byte msb (shift down the bits above)
+                del c[7]
+                debugw(c)
+
+                c.extend("00000000000") 
+                # pad to 4 bytes (32 bit integer format) : 3 bytes + 8 bits + 3 bits 
+                # because we previously removed two bits with del c[23], del c[15] and del c[7]
+                debugw(c)
+
+                # convert bytes array to 32 bit unsigned integer
+                inta = (struct.unpack("<L", c.tobytes()))[0]
+
+                inta += (2097152 + 16384 + 128)
+
+
+                debugw("recalled word:")
+                debugw(engdict[inta])
+                # print word
+                try:
+                    if(CharIsUpperCase == 2):
+                        detokenizer.append(engdict[inta].capitalize())
+                        detokenizer_idx += 1
+                        CharIsUpperCase = 0
+                    else:
+                        detokenizer.append(engdict[inta])
+                        detokenizer_idx += 1   
+
+                    if(CharIsUpperCase != 1):
+                        detokenizer.append(" ")
+                        detokenizer_idx += 1 
+                
+                except:
+                    debugw("something went wrong, could not find word in session DIC")
+
+                # increment byte counter with step 3, we processed 3 bytes.
+                idx += 3
+    
+   
 
     debugw(detokenizer)
     if not(len(outfile)):

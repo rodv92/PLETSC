@@ -1,6 +1,39 @@
 # PLETSC
 Pedantic lightweight english text stream compression
 
+# How to use :
+
+git clone and
+decompress dics.zip in the current folder.
+
+Syntax for compression :
+
+python3 dicstrv.py -c txt_inputfile compressed_outputfile
+Reads txt_inputfile and writes compressed text stream to compressed_outputfile.
+
+python3 dicstrv.py -c txt_inputfile
+Reads txt_input file and writes compressed output to stdout
+
+Syntax for decompression :
+
+python3 dicstrv.py -x compressed_inputfile txt_outputfile
+Reads compressed_inputfile and writes cleartext to txt_outputfile.
+
+python3 dicstrv.py -x compressed_inputfile
+
+Reads compressed_input file and writes cleartext output to stdout
+
+Syntax to generate a compiled dictionary of ngrams :
+
+python3 dicstrv.py -d cleartext_ngrams_inputfile compressed_ngrams
+
+This is rarely used in normal operation.
+
+NOTE: dictionary file count1_w.txt must be in the same directory as the script.
+outngrams.bin must be in the same directory as the script, if ngrams are used (secondpass=True)
+
+# Description :
+
 This script is useful for ASCII English text stream compression.
 It's pedantic because its final goal is to enforce a minima some English syntactic rules, such as whitespace after "," but not before, Capitalization after a "." etc... (but not grammar).
 Spell check will probably be recommended but should probably be done upstream (by another applicative layer),
@@ -31,7 +64,6 @@ The 3 byte address space is split in two :
     - fourth code : Huffmann, lowercase + uppercase + numbers, or numbers only.
     - fifth code : All printable ASCII space, mainly for passwords.
     Each of these codes tells what Huffmann tree to use.
-
 
 
 # Performance :

@@ -1,5 +1,5 @@
 # PLETSC
-Pedantic lightweight english text stream compression, word token dictionary ordered by frequency, plus session dictionary and 4,5ngrams dictionary.
+Lightweight english text stream compression, with word tokens, ngrams, session dictionaries and Huffmann for unknown words.
 
 # How to use :
 

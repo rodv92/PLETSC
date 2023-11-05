@@ -177,17 +177,17 @@ import traceback
 
 if ((len(sys.argv) < 3) or (len(sys.argv) > 4)):
     print("Syntax for compression :\n")
-    print("python3 dicstrv4.py -c <txt_inputfile> <compressed_outputfile>")
+    print("python3 dicstrv.py -c <txt_inputfile> <compressed_outputfile>")
     print("Reads txt_inputfile and writes compressed text stream to compressed_outputfile.\n") 
     
-    print("python3 dicstrv4.py -c <txt_inputfile>")
+    print("python3 dicstrv.py -c <txt_inputfile>")
     print("Reads txt_input file and writes compressed output to stdout\n")
 
     print("Syntax for decompression :\n")
-    print("python3 dicstrv4.py -x <compressed_inputfile> <txt_outputfile>")
+    print("python3 dicstrv.py -x <compressed_inputfile> <txt_outputfile>")
     print("Reads compressed_inputfile and writes cleartext to txt_outputfile.\n") 
     
-    print("python3 dicstrv4.py -x <compressed_inputfile>\n")
+    print("python3 dicstrv.py -x <compressed_inputfile>\n")
     print("Reads compressed_input file and writes cleartext output to stdout\n")
 
     print("NOTE: dictionary file count1_w.txt must be in the same directory as the script.")    
@@ -225,9 +225,9 @@ import time
 from dahuffman import HuffmanCodec
 
 # Huffmann is only used for absent words in count1_w.txt dictionary
-# Letter and special char frequencies of English Language. (need some tweaks for special chars, 
-# @ is absent since it is caught by the tokenizer)
-codec = HuffmanCodec.from_frequencies(
+# General lower and upper case frequency combined as lowercase
+
+codec_lower = HuffmanCodec.from_frequencies(
 {'e' :   56.88,	'm' :	15.36,
 'a'	:	43.31,	'h'	:	15.31,
 'r'	:	38.64,	'g'	:	12.59,
@@ -240,12 +240,246 @@ codec = HuffmanCodec.from_frequencies(
 'c'	:	23.13,	'x'	:	1.48,
 'u'	:	18.51,	'z'	:	1.39,
 'd'	:	17.25,	'j'	:	1,
-'p'	:	16.14,	'q'	:	1,
-'.' :   1,      '/' :   1
+'p'	:	16.14,	'q'	:	1
 }
 )
 
-codec.print_code_table()
+codec_lower.print_code_table()
+
+# following is ASCII mixed upper and lower case frequency from an English writer from Palm OS PDA memos in 2002
+# Credit : http://fitaly.com/board/domper3/posts/136.html
+
+codec_upperlower = HuffmanCodec.from_frequencies(
+
+{'A' : 0.3132,
+'B' : 0.2163,
+'C' : 0.3906,
+'D' : 0.3151,
+'E' : 0.2673,
+'F' : 0.1416,
+'G' : 0.1876,
+'H' : 0.2321,
+'I' : 0.3211,
+'J' : 0.1726,
+'K' : 0.0687,
+'L' : 0.1884,
+'M' : 0.3529,
+'N' : 0.2085,
+'O' : 0.1842,
+'P' : 0.2614,
+'Q' : 0.0316,
+'R' : 0.2519,
+'S' : 0.4003,
+'T' : 0.3322,
+'U' : 0.0814,
+'V' : 0.0892,
+'W' : 0.2527,
+'X' : 0.0343,
+'Y' : 0.0304,
+'Z' : 0.0076,
+'a' : 5.1880,
+'b' : 1.0195,
+'c' : 2.1129,
+'d' : 2.5071,
+'e' : 8.5771,
+'f' : 1.3725,
+'g' : 1.5597,
+'h' : 2.7444,
+'i' : 4.9019,
+'j' : 0.0867,
+'k' : 0.6753,
+'l' : 3.1750,
+'m' : 1.6437,
+'n' : 4.9701,
+'o' : 5.7701,
+'p' : 1.5482,
+'q' : 0.0747,
+'r' : 4.2586,
+'s' : 4.3686,
+'t' : 6.3700,
+'u' : 2.0999,
+'v' : 0.8462,
+'w' : 1.3034,
+'x' : 0.1950,
+'y' : 1.1330,
+'z' : 0.0596
+})
+
+codec_upperlower.print_code_table()
+
+# following is ASCII alpha numeric frequency from an English writer from Palm OS PDA memos in 2002
+# Credit : http://fitaly.com/board/domper3/posts/136.html
+
+codec_alphanumeric = HuffmanCodec.from_frequencies(
+
+{'0' : 0.5516,
+'1' : 0.4594,
+'2' : 0.3322,
+'3' : 0.1847,
+'4' : 0.1348,
+'5' : 0.1663,
+'6' : 0.1153,
+'7' : 0.1030,
+'8' : 0.1054,
+'9' : 0.1024,
+'A' : 0.3132,
+'B' : 0.2163,
+'C' : 0.3906,
+'D' : 0.3151,
+'E' : 0.2673,
+'F' : 0.1416,
+'G' : 0.1876,
+'H' : 0.2321,
+'I' : 0.3211,
+'J' : 0.1726,
+'K' : 0.0687,
+'L' : 0.1884,
+'M' : 0.3529,
+'N' : 0.2085,
+'O' : 0.1842,
+'P' : 0.2614,
+'Q' : 0.0316,
+'R' : 0.2519,
+'S' : 0.4003,
+'T' : 0.3322,
+'U' : 0.0814,
+'V' : 0.0892,
+'W' : 0.2527,
+'X' : 0.0343,
+'Y' : 0.0304,
+'Z' : 0.0076,
+'a' : 5.1880,
+'b' : 1.0195,
+'c' : 2.1129,
+'d' : 2.5071,
+'e' : 8.5771,
+'f' : 1.3725,
+'g' : 1.5597,
+'h' : 2.7444,
+'i' : 4.9019,
+'j' : 0.0867,
+'k' : 0.6753,
+'l' : 3.1750,
+'m' : 1.6437,
+'n' : 4.9701,
+'o' : 5.7701,
+'p' : 1.5482,
+'q' : 0.0747,
+'r' : 4.2586,
+'s' : 4.3686,
+'t' : 6.3700,
+'u' : 2.0999,
+'v' : 0.8462,
+'w' : 1.3034,
+'x' : 0.1950,
+'y' : 1.1330,
+'z' : 0.0596
+})
+
+codec_alphanumeric.print_code_table()
+
+# following is Whole ASCII printable chars frequency except whitespace from an English writer from Palm OS PDA memos in 2002
+# Credit : http://fitaly.com/board/domper3/posts/136.html
+
+codec_all = HuffmanCodec.from_frequencies(
+
+{'!' : 0.0072,
+'\"' : 0.2442,
+'#' : 0.0179,
+'$' : 0.0561,
+'%' : 0.0160,
+'&' : 0.0226,
+'\'' : 0.2447,
+'(' : 0.2178,
+')' : 0.2233,
+'*' : 0.0628,
+'+' : 0.0215,
+',' : 0.7384,
+'-' : 1.3734,
+'.' : 1.5124,
+'/' : 0.1549,
+'0' : 0.5516,
+'1' : 0.4594,
+'2' : 0.3322,
+'3' : 0.1847,
+'4' : 0.1348,
+'5' : 0.1663,
+'6' : 0.1153,
+'7' : 0.1030,
+'8' : 0.1054,
+'9' : 0.1024,
+':' : 0.4354,
+';' : 0.1214,
+'<' : 0.1225,
+'=' : 0.0227,
+'>' : 0.1242,
+'?' : 0.1474,
+'@' : 0.0073,
+'A' : 0.3132,
+'B' : 0.2163,
+'C' : 0.3906,
+'D' : 0.3151,
+'E' : 0.2673,
+'F' : 0.1416,
+'G' : 0.1876,
+'H' : 0.2321,
+'I' : 0.3211,
+'J' : 0.1726,
+'K' : 0.0687,
+'L' : 0.1884,
+'M' : 0.3529,
+'N' : 0.2085,
+'O' : 0.1842,
+'P' : 0.2614,
+'Q' : 0.0316,
+'R' : 0.2519,
+'S' : 0.4003,
+'T' : 0.3322,
+'U' : 0.0814,
+'V' : 0.0892,
+'W' : 0.2527,
+'X' : 0.0343,
+'Y' : 0.0304,
+'Z' : 0.0076,
+'[' : 0.0086,
+'\\' : 0.0016,
+']' : 0.0088,
+'^' : 0.0003,
+'_' : 0.1159,
+'`' : 0.0009,
+'a' : 5.1880,
+'b' : 1.0195,
+'c' : 2.1129,
+'d' : 2.5071,
+'e' : 8.5771,
+'f' : 1.3725,
+'g' : 1.5597,
+'h' : 2.7444,
+'i' : 4.9019,
+'j' : 0.0867,
+'k' : 0.6753,
+'l' : 3.1750,
+'m' : 1.6437,
+'n' : 4.9701,
+'o' : 5.7701,
+'p' : 1.5482,
+'q' : 0.0747,
+'r' : 4.2586,
+'s' : 4.3686,
+'t' : 6.3700,
+'u' : 2.0999,
+'v' : 0.8462,
+'w' : 1.3034,
+'x' : 0.1950,
+'y' : 1.1330,
+'z' : 0.0596,
+'{' : 0.0026,
+'|' : 0.0007,
+'}' : 0.0026,
+'~' : 0.0003,
+})
+
+codec_all.print_code_table()
 #quit()
 
 debug_on = True
@@ -273,6 +507,68 @@ def check_file_is_utf8(filename):
         debugw("invalid utf-8")
         return False
 
+def find_huffmann_to_use(token):
+
+    if(not use_huffmann):
+        debugw("do not use Huffmann, encode char by char")
+        return 0
+    
+    not_alllower = re.search("[^a-z]")
+    
+    if(not not_alllower):
+        debugw("all lower case")
+        return 1
+    
+    not_alllowerorupper = re.search("[^A-Za-z]")
+    
+    if(not not_alllowerorupper):
+        debugw("all lower or upper")
+        return 2
+    
+    not_alllalphanumeric = re.search("[^A-Za-z0-9]")
+    
+    if(not not_alllalphanumeric):
+        debugw("all alpha numeric")
+        return 3
+    else:
+        debugw("all printable, except whitespace")
+        return 4
+    
+def encode_unknown(token,treecode):
+
+    if (treecode == 0):
+        bytes_unknown = bytearray()
+        for charidx in range(0, len(token)):
+            debugw("appending chars..")
+            debugw(token[charidx])
+
+            # only append if it is not an unexpected termination in the unknown token
+            if (not ord(token[charidx]) == 0):
+                bytes_unknown.append(ord(token[charidx]))
+            else:
+                debugw("unexpected termination chr(0) in unknown token, discarding character")
+
+
+        return bytes_unknown
+    if (treecode == 1):
+        return codec_lower.encode(token)
+    if (treecode == 2):
+        return codec_upperlower.encode(token)           
+    if (treecode == 3):
+        return codec_alphanumeric.encode(token)                      
+    if (treecode == 4):
+        return codec_all.encode(token)                      
+
+def decode_unknown(bytetoken,treecode):
+
+    if (treecode == 1):
+        return codec_lower.decode(bytetoken)
+    if (treecode == 2):
+        return codec_upperlower.decode(bytetoken)           
+    if (treecode == 3):
+        return codec_alphanumeric.decode(bytetoken)                      
+    if (treecode == 4):
+        return codec_all.decode(bytetoken)  
 
 def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoken,gendic):
   
@@ -314,7 +610,8 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             unknown_token_idx += 1
                        
 
-            subtokensid = [4194304 - 1] # subtoken code for unknown word escape sequence.                       
+            #subtokensid = [4194304 - 1] # subtoken code for unknown word escape sequence.                       
+            subtokensid = [4194303 - find_huffmann_to_use(subtokens[0])]                   
             #print(subtokensid)
             #continue
         else:
@@ -337,8 +634,9 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
                         return (compressed, token_of_line_count)
         
                     debugw("unknown subtoken")
-                    #subtokenid = 4194304 - 1 # subtoken code for unknown word escape sequence.
-                    subtokensid.append(4194304 - 1)
+                    subtokensid.append(4194303 - find_huffmann_to_use(subtoken))
+                    #subtokensid.append(4194304 - 1)
+                    
                     # add this unknown subtoken to a session dic so it can be recalled.
                     #AMEND dictionary 
                     # add this unknown subtoken to a session dic so it can be recalled.
@@ -476,35 +774,71 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
 
 
         #if(subtokenid == (4194304 - 1)):
-        if(subtokenid in range(4194300,4194304)):
+        if(subtokenid in range(4194299,4194304)):
 
-            compressed.append(255)
-            compressed.append(255)
-            compressed.append(255)
+            #compressed.append(255)
+            #compressed.append(255)
+            #compressed.append(255)
+            debugw("huffmann tree code :" + str(subtokenid))
 
             # TODO : Use Huffmann tree instead of byte->byte encoding.
             
+            #convert to bytes1 (array of 3 bytes)
+            bytes2 = subtokenid.to_bytes(3,byteorder='little')
+            debugw("".join([f"\\x{byte:02x}" for byte in bytes2]))
+
+            #convert to bitarray
+            c = bitarray(endian='little')
+            c.frombytes(bytes2)
+            debugw(c)
+            
+            # set msb of first byte to 1 and shift the bits above up.
+            c.insert(7,1)
+            debugw(c)
+
+            # set msb of second byte to 1 and shift the bits above up.
+            c.insert(15,1)
+            debugw(c)
+
+            # no need to set  msb of third byte to 1 since the range will take care of it.
+            #c.insert(23,1)
+            #debugw(c)
+
+            # remove two excess bits that arose from our shifts
+            del c[24:26:1]
+            debugw(c)
+            
+            # append our three tweaked bytes that signify the huffmann tree to use to the compressed bytearray
+            compressed.append((c.tobytes())[0])
+            compressed.append((c.tobytes())[1])
+            compressed.append((c.tobytes())[2])
+
             if (len(subtokens) == 1):
                 if(not use_huffmann):
                     debugw("encoding unkown word")
-                    for charidx in range(0, len(line_token)):
-                        debugw("appending chars..")
-                        debugw(line_token[charidx])
-                        compressed.append(ord(line_token[charidx]))
+                    #for charidx in range(0, len(line_token)):
+                    #    debugw("appending chars..")
+                    #    debugw(line_token[charidx])
+                    #    compressed.append(ord(line_token[charidx]))
+                    compressed.extend(encode_unknown(line_token,0))
                 else:
                     debugw("encoding unkown line token with Huffmann")
-                    compressed.extend(codec.encode(line_token))
+                    huffmann_tree_code = -(subtokenid - 4194303)
+                    compressed.extend(encode_unknown(line_token,huffmann_tree_code))
             else:
                 if(not use_huffmann):
                     debugw("encoding unkown subtoken")
-                    for charidx in range(0, len(subtokens[subtokenidx])):
-                        debugw("appending chars..")
-                        debugw((subtokens[subtokenidx])[charidx])
-                        compressed.append(ord((subtokens[subtokenidx])[charidx]))
+                    #for charidx in range(0, len(subtokens[subtokenidx])):
+                    #    debugw("appending chars..")
+                    #    debugw((subtokens[subtokenidx])[charidx])
+                    #    compressed.append(ord((subtokens[subtokenidx])[charidx]))
+                    compressed.extend(encode_unknown(subtokens[subtokenidx],0))
                 else:
                     debugw("encoding unkown subtoken with Huffmann")
                     debugw(subtokens[subtokenidx])
-                    compressed.extend(codec.encode(subtokens[subtokenidx]))
+                    #huffmann_tree_code = find_huffmann_to_use(subtokens[subtokenidx])
+                    huffmann_tree_code = -(subtokenid - 4194303)
+                    compressed.extend(encode_unknown(subtokens[subtokenidx],huffmann_tree_code))
             compressed.append(0) # terminate c string style
         subtokenidx += 1        
     token_of_line_count += 1
@@ -695,68 +1029,6 @@ def compress_second_pass(compressed):
 
     return candidates        
 
-
-def process_candidates(candidates):
-
-    #here we scan all candidates.
-    #if there are overlaps, we select the candidate with the best ratio, if any.
-    #The result is a reduced list of candidates data.
-
-    #Next we recreate the compressed stream and replace the bytes at insertpos by the candidate code
-    debugw(candidates)
-    candidates_reduced = []
-    idx_reduced = 0
-    idx = 0
-
-    while(idx < len(candidates)):
-        
-        code = candidates[idx][0]
-        insertpos = candidates[idx][1]
-        removebytes = candidates[idx][2]
-        ratio = candidates[idx][3]
-        
-        for idx_lookahead in range(idx+1,len(candidates)):
-            
-            code_lookahead = candidates[idx_lookahead][0]
-            insertpos_lookahead = candidates[idx_lookahead][1]
-            removebytes_lookahead = candidates[idx_lookahead][2]
-            ratio_lookahead = candidates[idx_lookahead][3]
-
-            if((insertpos + removebytes - 1) >= insertpos_lookahead):
-                
-                debugw("overlap!")
-                debugw(code)
-                debugw(code_lookahead)
-                # compression overlap detected
-                # find best ratio
-                if(ratio_lookahead > ratio):
-                    debugw("lookahead is best")
-                    candidates_reduced.append(candidates[idx_lookahead])
-                    idx = idx_lookahead
-                else:
-                    debugw("original is best")
-                    candidates_reduced.append(candidates[idx])
-                    idx = idx_lookahead + 1
-                    keep_original = True
-                idx_reduced += 1
-            else:
-                debugw("no overlap")
-                if(idx_reduced):
-                    if (candidates_reduced[idx_reduced -1] != candidates[idx]):
-                        debugw("no duplicate")
-                        candidates_reduced.append(candidates[idx])
-                        idx_reduced += 1
-                    else:
-                        debugw("duplicate detected!")
-                else:
-                    candidates_reduced.append(candidates[idx])
-                    debugw("first add!")
-                    idx_reduced += 1
-                break
-
-        idx += 1        
-
-    return candidates_reduced                
 
 def process_candidates_v2(candidates):
 
@@ -1110,9 +1382,17 @@ if (compress):
     if(check_file_is_utf8(infile)):
         with codecs.open(infile, 'r', encoding='utf-8') as utf8_file:
             # Read the content of the UTF-8 file and transcode it to ASCII
+            # encode('ascii','ignore') MAY replace unknown char with chr(0)
+            # We don't want that, as it is a termination char for unknown strings.
+            # on the other hand backslashreplace replaces too much chars that could be transcribed
+            # the best option for now it check for chr(0) presence before writing the unknown token representation.
             ascii_content = utf8_file.read().encode('ascii', 'ignore').decode('ascii')
             #debugw(ascii_content)
             Linesin = ascii_content.splitlines()
+            if(debug_on):
+                outfile_ascii = infile + ".asc"
+                with codecs.open(outfile_ascii, "w", encoding='ascii') as ascii_file:
+                    ascii_file.write(ascii_content)
     else:
         # Reading file to be compressed
         file2 = open(infile,'r')
@@ -1270,6 +1550,7 @@ else:
                     detokenizer.append(" ")
                     detokenizer_idx += 1
 
+                debugw(engdict[inta])
                 idx += 1
 
             elif((compressed[idx] & 128) and (not (compressed[idx+1] & 128))):
@@ -1305,7 +1586,7 @@ else:
                     detokenizer.append(" ")
                     detokenizer_idx += 1 
                 
-
+                debugw(engdict[inta])
                 # increment byte counter with step 2, we processed 2 bytes.
                 idx += 2
     
@@ -1407,61 +1688,14 @@ else:
                         detokenizer.append(" ") 
                         detokenizer_idx += 1
                     
+                    debugw(engdict[inta])
                     # increment byte counter with step 3, we processed 3 bytes.
                 idx += 3
 
-            elif((compressed[idx] == 255) and (compressed[idx+1] == 255) and (compressed[idx+2] == 255)):   
-            #elif((compressed[idx] & 128) and (compressed[idx+1] & 128) and (compressed[idx+2] & 128)):
-                # TODO manage 4 escape sequences
-                debugw("unknown word escape sequence detected")
-                #unknown word escape sequence detected.
-                char = compressed[idx+3]
-                stra = ""
-                if(not use_huffmann):
-                    idxchar = 0
-                    while(char != 0):
-                        debugw("char=")
-                        debugw(char)
-                        stra += chr(char)
-                        debugw("printing string state=")
-                        debugw(stra)
-                        idxchar += 1
-                        char = compressed[idx+3 + idxchar]
-                    debugw("termination char detected=")
-                    debugw(char)
-                else:
-                    bstr = bytearray()
-                    idxchar = 0
-                    while(char != 0):
-                        bstr.append(char)
-                        idxchar += 1
-                        char = compressed[idx+3 + idxchar]
-                    debugw("huffmann : termination char detected=")
-                    debugw(char)
-                    stra = codec.decode(bstr)    
-                
-                debugw("we append that unknown word in our session dic at idx: " + str(unknown_token_idx) + " since it may be recalled")
-                engdictrev[stra] = unknown_token_idx
-                engdict[unknown_token_idx] = stra
-                unknown_token_idx += 1
-                
-                
-                if(CharIsUpperCase == 2):
-                    detokenizer.append(stra.capitalize())
-                    detokenizer_idx += 1
-                    CharIsUpperCase = 0
-                else:
-                    detokenizer.append(stra)
-                    detokenizer_idx += 1 
-                if(CharIsUpperCase != 1):
-                    detokenizer.append(" ") 
-                    detokenizer_idx += 1
-
-                idx += 3 + idxchar
-            
+            #elif((compressed[idx] == 255) and (compressed[idx+1] == 255) and (compressed[idx+2] == 255)):   
             elif((compressed[idx] & 128) and (compressed[idx+1] & 128) and (compressed[idx+2] & 128)):
-                
-                debugw("previously unknown word now in DIC, recall it")
+            
+                #check if Huffmann first
 
                 chunk = compressed[idx:idx+3]
 
@@ -1486,38 +1720,100 @@ else:
 
                 c.extend("00000000000") 
                 # pad to 4 bytes (32 bit integer format) : 3 bytes + 8 bits + 3 bits 
-                # because we previously removed two bits with del c[23], del c[15] and del c[7]
+                # because we previously removed three bits with del c[23], del c[15] and del c[7]
                 debugw(c)
 
                 # convert bytes array to 32 bit unsigned integer
                 inta = (struct.unpack("<L", c.tobytes()))[0]
+                inta -= 2097151
+                # if it is a Huffmann select tree code it will be 0 to 4 included
+                # if it is a session DIC it will be shifted in the negatives.
 
-                inta += (2097152 + 16384 + 128)
+                if (inta in range(0,5)):        
 
-
-                debugw("recalled word:")
-                debugw(engdict[inta])
-                # print word
-                try:
+                    # unknown word
+                    # end check if Huffmann first
+                    debugw("unknown word escape sequence detected, code: " + str(inta))
+                    #unknown word escape sequence detected.
+                    if(inta == 0):
+                        char = compressed[idx+3]
+                        stra = ""
+                        idxchar = 0
+                        while(char != 0):
+                            debugw("char=")
+                            debugw(char)
+                            stra += chr(char)
+                            debugw("printing string state=")
+                            debugw(stra)
+                            idxchar += 1
+                            char = compressed[idx+3 + idxchar]
+                        debugw("termination char detected=")
+                        debugw(char)
+                    else:
+                        bstr = bytearray()
+                        idxchar = 0
+                        while(char != 0):
+                            bstr.append(char)
+                            idxchar += 1
+                            char = compressed[idx+3 + idxchar]
+                        debugw("huffmann : termination char detected=")
+                        debugw(char)
+                        stra = decode_unknown(bstr,inta)
+                        #stra = codec.decode(bstr)    
+                    
+                    debugw("we append that unknown word in our session dic at idx: " + str(unknown_token_idx) + " since it may be recalled")
+                    engdictrev[stra] = unknown_token_idx
+                    engdict[unknown_token_idx] = stra
+                    unknown_token_idx += 1
+                    
+                        
                     if(CharIsUpperCase == 2):
-                        detokenizer.append(engdict[inta].capitalize())
+                        detokenizer.append(stra.capitalize())
                         detokenizer_idx += 1
                         CharIsUpperCase = 0
                     else:
-                        detokenizer.append(engdict[inta])
-                        detokenizer_idx += 1   
-
-                    if(CharIsUpperCase != 1):
-                        detokenizer.append(" ")
+                        detokenizer.append(stra)
                         detokenizer_idx += 1 
-                
-                except:
-                    debugw("something went wrong, could not find word in session DIC")
-
-                # increment byte counter with step 3, we processed 3 bytes.
-                idx += 3
+                    if(CharIsUpperCase != 1):
+                        detokenizer.append(" ") 
+                        detokenizer_idx += 1
     
-   
+                else:
+
+                    inta += 2097151
+                    # it is a session DIC, shifting back to 0.
+                    inta += (2097152 + 16384 + 128)
+                    # it is a session DIC, shifting back session dic address space.
+
+                    debugw("recalled word:")
+                    
+                    try:
+                        debugw(engdict[inta])
+                        # print word
+                    
+                        if(CharIsUpperCase == 2):
+                            detokenizer.append(engdict[inta].capitalize())
+                            detokenizer_idx += 1
+                            CharIsUpperCase = 0
+                        else:
+                            detokenizer.append(engdict[inta])
+                            detokenizer_idx += 1   
+
+                        if(CharIsUpperCase != 1):
+                            detokenizer.append(" ")
+                            detokenizer_idx += 1 
+                    
+                    except:
+                        debugw("something went wrong, could not find word in session DIC")
+
+                        for sessidx in range(2113664,unknown_token_idx):
+                            debugw("session_index:" + str(sessidx))
+                            debugw(engdict[sessidx])
+                            debugw(engdictrev[engdict[sessidx]])
+                            debugw("session_index:" + str(sessidx))
+
+
+                idx += 3 + idxchar
 
     debugw(detokenizer)
     if not(len(outfile)):

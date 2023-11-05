@@ -1,4 +1,4 @@
-# PEDANTIC LIGHTWEIGHT ENGLISH TEXT STREAM COMPRESSION (LETSC)
+# LIGHTWEIGHT ENGLISH TEXT STREAM COMPRESSION (LETSC)
 # (adaptive encoding length 1byte/2byte/3byte based on word dictionary with statistical prevalence ordering - count1_w.txt)
 # Huffmann encoding for uknown tokens
 # Enforces English syntax rules for punctuation
@@ -16,7 +16,7 @@
 # Python + packages Requirements
 
 # Python 3.9
-# nltk, bitarray, bitstring, re
+# nltk, bitarray, bitstring, re, dahuffmann
 
 # Performance : ratios between x2.6 for Middle to Modern and elaborate English (ex: Shakespeare)
 # Up to x3 and more for simple english.
@@ -224,8 +224,22 @@ import struct
 import time
 from dahuffman import HuffmanCodec
 
+
+debug_on = False
+debug_ngrams_dic = False
+secondpass = True
+use_huffmann = False
+unknown_token_idx = 16384 + 128 + 2097152
+
+
+def debugw(strdebug):
+    if (debug_on):
+        print(strdebug)
+
 # Huffmann is only used for absent words in count1_w.txt dictionary
 # General lower and upper case frequency combined as lowercase
+
+
 
 codec_lower = HuffmanCodec.from_frequencies(
 {'e' :   56.88,	'm' :	15.36,
@@ -244,7 +258,7 @@ codec_lower = HuffmanCodec.from_frequencies(
 }
 )
 
-codec_lower.print_code_table()
+debugw(codec_lower.get_code_table())
 
 # following is ASCII mixed upper and lower case frequency from an English writer from Palm OS PDA memos in 2002
 # Credit : http://fitaly.com/board/domper3/posts/136.html
@@ -305,7 +319,7 @@ codec_upperlower = HuffmanCodec.from_frequencies(
 'z' : 0.0596
 })
 
-codec_upperlower.print_code_table()
+debugw(codec_upperlower.get_code_table())
 
 # following is ASCII alpha numeric frequency from an English writer from Palm OS PDA memos in 2002
 # Credit : http://fitaly.com/board/domper3/posts/136.html
@@ -376,7 +390,7 @@ codec_alphanumeric = HuffmanCodec.from_frequencies(
 'z' : 0.0596
 })
 
-codec_alphanumeric.print_code_table()
+debugw(codec_alphanumeric.get_code_table())
 
 # following is Whole ASCII printable chars frequency except whitespace from an English writer from Palm OS PDA memos in 2002
 # Credit : http://fitaly.com/board/domper3/posts/136.html
@@ -479,20 +493,8 @@ codec_all = HuffmanCodec.from_frequencies(
 '~' : 0.0003,
 })
 
-codec_all.print_code_table()
-#quit()
-
-debug_on = True
-debug_ngrams_dic = False
-secondpass = True
-use_huffmann = False
-unknown_token_idx = 16384 + 128 + 2097152
-
-
-def debugw(strdebug):
-    if (debug_on):
-        print(strdebug)
-        
+debugw(codec_all.get_code_table())
+#quit()        
 
 def check_file_is_utf8(filename):
     debugw("checking encoding of:")

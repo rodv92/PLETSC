@@ -35,12 +35,12 @@ outngrams.bin must be in the same directory as the script, if ngrams are used (s
 # Description :
 
 This script is useful for ASCII English text stream compression.
-It's pedantic because its final goal is to enforce a minima some English syntactic rules, such as whitespace after "," but not before, Capitalization after a "." etc... (but not grammar).
+It's pedantic (P in PLETSC stands for "pedantic") because its final goal is to enforce a minima some English syntactic rules, such as whitespace after "," but not before, Capitalization after a "." etc... (but not grammar).
 Spell check will probably be recommended but should probably be done upstream (by another applicative layer),
 as it will ensure a better compression ratio - since it is based on words of the english dictionary.
 
 Its compression method is primarily based on a token (words and punctuation) dictionary.
-It leverages statistical prevalence of modern english words:
+It leverages frequency of modern english words:
 
 - Words of the primary dictionary are sorted from most used to least used.
 - The line number is used as an index. (+1) index 0 is reserved for whitespace.
@@ -81,7 +81,21 @@ encoding based on that, they're usually slower.
 
 This is why this algorithm is intended for stream compression (on the fly). However, its current implementation is based on reading files. and outputting to a file or stdout.
 
-It is fast and quite simple. around 1200 LOC.
+# Compression speed (all options enabled)
+
+  For this test :
+
+- File is call_of_cthulhu.txt, size uncompressed is 69 kB
+- Compression speed around 23,3 kB/s on a Intel(R) Core(TM) i5 CPU       M 520  @ 2.40GHz (computer from 2011), + SSD storage
+
+# Footprint (filesystem)
+
+zipped size of count1_w.txt + outngrams.bin is 11 566 806 bytes
+unzipped size is : 31 327 633 bytes + 3 157 445 bytes = 34 485 078 bytes.
+
+# Footprint (memory)
+
+To be determined
 
 # Dependecies 
 
@@ -94,6 +108,9 @@ codecs, nltk, re, bitstring, bitarray, struct, time, dahuffman
 Input text file must be ASCII (for now) or UTF-8 decodable to ASCII (English). It ignores conversion errors.
 Decoded file will be encoded in ASCII.
 It should be in English to get adequate conversion.
+
+Both ends (sender and receiver) MUST have the SAME dictionaries and the SAME Huffmann tables, as these are not sent with 
+the data.
 
 # Information about the dictionaries
 

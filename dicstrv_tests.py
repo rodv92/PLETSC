@@ -709,7 +709,11 @@ def replace_repeating_chars(byte_array, n, separator):
                 # Replace repetitions with encoded value
                 encoded_value = bytearray(current_char.to_bytes(1,'little'))
                 encoded_value.extend(separator)
-                encoded_value.append(count.to_bytes(1,'little'))
+                if (count < 255):
+                    encoded_value.append(count.to_bytes(1,'little')[0])
+                else:
+                    encoded_value.append(b'\xFF')
+                    encoded_value.extend(count.to_bytes(2,'little'))                    
                 #encoded_value = bytes([current_char, separator, count])
                 result_array.extend(encoded_value)
                 debugw("encoded value:")
@@ -1462,6 +1466,8 @@ def replace_candidates_in_processed(candidates,processed):
 
 def replace_candidates_in_processed_v2(candidates,processed):
 
+
+    # in place replace (without del)
     byteshift = 0
     shiftcode = 0
     debugw("total candidates to replace:")

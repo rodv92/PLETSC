@@ -66,6 +66,15 @@ The 3 byte address space is split in two :
     - fifth code : All printable ASCII space, mainly for passwords.
     Each of these codes tells what Huffmann tree to use.
 
+Currently, Work is being on done on further improving compression by :
+
+- Third stage : Applying a Burrows-Wheeler Transform to the output of the second pass,
+- Fourth stage : A byte based RLE, using absent one or two byte sequences from previous stage as separators
+- And finally a huffmann encoding pass trained on averaged binary files states from the second pass. 
+  (file with the huffmann tree is huffmann_final_pass.bin)
+
+- Creating a preamble containing separators (to use in third and fourth stages) to use for decompression as well as various other informations required to decompress.
+
 
 # Performance :
 
@@ -136,6 +145,11 @@ The algorithm is heavily commented in the code.
 Main applications could be messaging over low bandwidth links like POCSAG radio text, or JS8Call for HAM radio, and IoT.
 
 However, note that the underlying digital mode should allow binary transmission (not only transmission of printable ASCII characters) for seamless integration.
+
+For HAM Radio, there is also the issue that this compression algorithm REQUIRES the dictionaries to be present at the receiver
+end too, which could be interpreted by regulating authorities such as the FCC as encryption, which is forbidden.
+On the other hand, it is possible to mitigate this issue if a protocol preamble is added stating that this compression scheme is used, and then installed as a plugin.
+If there is no Internet access, and the RX side doesn't have the dictionaries or updated software, no luck...
 
 # TODO and ISSUES :
 

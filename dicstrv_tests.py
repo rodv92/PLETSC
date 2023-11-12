@@ -712,7 +712,7 @@ def replace_repeating_chars(byte_array, n, separator):
                 if (count < 255):
                     encoded_value.append(count.to_bytes(1,'little')[0])
                 else:
-                    encoded_value.append(b'\xFF')
+                    encoded_value.append(255)
                     encoded_value.extend(count.to_bytes(2,'little'))                    
                 #encoded_value = bytes([current_char, separator, count])
                 result_array.extend(encoded_value)
@@ -1827,13 +1827,18 @@ if (compress):
 
         if(orig_idx < 255):
             compressed3[:0] = bytearray(orig_idx.to_bytes(1, 'little'))
-        else:
+        elif(orig_idx < 65535):
             compressed3[:0] = bytearray(orig_idx.to_bytes(2, 'little'))
             compressed3[:0] = bytearray(b'\xFF')
+        else:
+            compressed3[:0] = bytearray(orig_idx.to_bytes(3, 'little'))
+            compressed3[:0] = bytearray(b'\xFF')
+            compressed3[:0] = bytearray(b'\xFF')
             
-        compressed3[:0] = bytearray((abs_chars[0]).to_bytes(1,'little')) # prepend BWT eof
-        compressed3[:0] = bytearray((abs_chars[1]).to_bytes(1,'little')) # prepend RLE separator
-        
+        #compressed3[:0] = bytearray((abs_chars[0]).to_bytes(1,'little')) # prepend BWT eof
+        #compressed3[:0] = bytearray((abs_chars[1]).to_bytes(1,'little')) # prepend RLE separator
+        compressed3[:0] = abs_seq[0] # prepend BWT eof
+        compressed3[:0] = abs_seq[1] # prepend RLE separator        
 
         debugw("rle:")
         debugw(len(compressed3))

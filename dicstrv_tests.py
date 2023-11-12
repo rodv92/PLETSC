@@ -670,6 +670,90 @@ def bwt_decode(bwt_result, original_index, eof):
 
     return decoded
 
+def find_repeating_chars(byte_array, n):
+    repeating_chars = {}
+
+    current_char = byte_array[0]
+    current_start = 0
+    count = 1
+
+    for i in range(1, len(byte_array)):
+        if byte_array[i] == current_char:
+            count += 1
+        else:
+            if count >= n:
+                repeating_chars[current_char] = (current_start, count)
+            
+            current_char = byte_array[i]
+            current_start = i
+            count = 1
+
+    # Check for the last character sequence
+    if count >= n:
+        repeating_chars[current_char] = (current_start, count)
+
+    return repeating_chars
+
+def replace_repeating_chars(byte_array, n, separator):
+    result_array = bytearray()
+    
+    current_char = byte_array[0]
+    current_start = 0
+    count = 1
+
+    for i in range(1, len(byte_array)):
+        if byte_array[i] == current_char:
+            count += 1
+        else:
+            if count >= n:
+                # Replace repetitions with encoded value
+                encoded_value = bytes([current_char, separator, count])
+                result_array.extend(encoded_value)
+                debugw("encoded value:")
+                debugw("".join([f"\\x{byte:02x}" for byte in encoded_value]))
+            else:
+                result_array.extend(byte_array[current_start:i])
+                debugw("no change:")
+                debugw("".join([f"\\x{byte:02x}" for byte in byte_array[current_start:i]]))
+            
+
+            current_char = byte_array[i]
+            current_start = i
+            count = 1
+
+    # Check for the last character sequence
+    if count >= n:
+        encoded_value = bytes([current_char, separator, count])
+        result_array.extend(encoded_value)
+    else:
+        result_array.extend(byte_array[current_start:])
+
+    return result_array
+
+def find_absent_sequences(byte_array, n):
+    # Step 1: Build a set of all contiguous two-byte sequences present in the file
+    present_sequences = set()
+    for i in range(len(byte_array) - 1):
+        present_sequences.add((byte_array[i], byte_array[i + 1]))
+
+    # Step 2: Build a list of all possible two-byte sequences (from 0 to 65535)
+    all_possible_sequences = [(high, low) for high in range(256) for low in range(256)]
+
+    # Step 3: Find sequences not present in the file, stopping when at least n absent sequences are found
+    absent_sequences = []
+    count = 0
+
+    for seq in all_possible_sequences:
+        if seq not in present_sequences:
+            absent_sequences.append(seq)
+            count += 1
+            if count >= n:
+                break
+
+    return absent_sequences
+
+
+
 def check_file_is_utf8(filename):
     debugw("checking encoding of:")
     debugw(filename)
@@ -1635,12 +1719,66 @@ if (compress):
             debugw(processed_candidates)
             compressed = replace_candidates_in_processed(processed_candidates,compressed)
 
-        # used for stats
+
         frequency = Counter(compressed).most_common()
         frequency_dic = {}
 
         for (ascii_code, count) in frequency:
             frequency_dic[ascii_code] = count
+
+        #for key,value in sorted(frequency_dic2.items()):
+        #    debugw(str(key) + " " + str(value))
+        #key_idx = 0
+        
+        
+        abs_chars = []
+        #for key,value in sorted(frequency_dic2.items()):
+        #    if key != key_idx:
+        #        debugw("absent char!: "+ str(key_idx) + ", use as EOF for bwt")
+        #        abs_chars.append(key_idx)
+        #        #break
+        #    key_idx += 1
+
+
+        for charval in range(0,256):
+            if charval not in frequency_dic.keys():
+                abs_chars.append(charval)
+
+        debugw("asbent chars:")
+        debugw(abs_chars)
+
+        abs_seq = []
+        if(not len(abs_chars)):
+            abs_seq = find_absent_sequences(compressed,2)
+
+        debugw("asbent seq:")
+        debugw(abs_seq)
+        quit()
+
+
+        (compressed3, orig_idx) = bwt_encode(compressed,abs_chars[0])
+        compressed3 = bytearray(compressed3)
+
+        debugw("wheeler:")
+        debugw(len(compressed3))
+
+        #repeats = find_repeating_chars(compressed3,4)
+        compressed3 = replace_repeating_chars(compressed3,4,abs_chars[1])
+        debugw("orig_idx")
+        debugw(orig_idx)
+
+        if(orig_idx < 255):
+            compressed3[:0] = bytearray(orig_idx.to_bytes(1, 'little'))
+        else:
+            compressed3[:0] = bytearray(orig_idx.to_bytes(2, 'little'))
+            compressed3[:0] = bytearray(b'\xFF')
+            
+        compressed3[:0] = bytearray((abs_chars[0]).to_bytes(1,'little')) # prepend BWT eof
+        compressed3[:0] = bytearray((abs_chars[1]).to_bytes(1,'little')) # prepend RLE separator
+        
+
+        debugw("rle:")
+        debugw(len(compressed3))
 
         codec_final_pass = HuffmanCodec.load("huffmann_final_pass.bin") #based on compressed interface.txt (interface.bin)
 
@@ -1652,22 +1790,124 @@ if (compress):
         #codec_final_pass.save("huffmann_final_pass.bin")
         codec_final_pass.print_code_table()
         
-        compressed2 = codec_final_pass.encode(compressed)
-       
-        # used for stats       
-        frequency2 = Counter(compressed2).most_common()
-        frequency_dic2 = {}
+        compressed4 = codec_final_pass.encode(compressed3)
+        compressed4_bytesarray = bytearray(compressed4)
+        frequency4 = Counter(compressed4).most_common()
+        frequency_dic4 = {}
 
-        for (ascii_code, count) in frequency2:
-            frequency_dic2[ascii_code] = count
+        for (ascii_code, count) in frequency4:
+            frequency_dic4[ascii_code] = count
 
+        """
+        posit_idx = {}
+        for byte_idx in range(0,len(compressed3)):
+            if compressed3[byte_idx] in posit_idx.keys():
+                #print()
+                tmplist = posit_idx[compressed3[byte_idx]] 
+                tmplist.append(byte_idx)
+                posit_idx[compressed3[byte_idx]] = tmplist
+            else:
+                posit_idx[compressed3[byte_idx]] = [byte_idx]
+
+        posit_idx2 = {}
+        for byte_idx2 in range(0,len(compressed)):
+            if compressed[byte_idx2] in posit_idx2.keys():
+                #print()
+                tmplist2 = posit_idx2[compressed[byte_idx2]] 
+                tmplist2.append(byte_idx2)
+                posit_idx2[compressed[byte_idx2]] = tmplist2
+            else:
+                posit_idx2[compressed[byte_idx2]] = [byte_idx2]
+
+        #debugw(sorted(posit_idx2.items()))
+        debugw(sorted(posit_idx.items()))
+        sorted_indexes = sorted(posit_idx.items())
+        
+        prevlastindex = -1
+        concat_index = []
+        for sorted_index in sorted_indexes:
+            for posidx in range(0,len(sorted_index[1])):
+                sorted_index[1][posidx] += 1
+            if (prevlastindex != -1):
+                if prevlastindex < sorted_index[1][0]:
+                    #encode exception : last index of prev char is below first index of next char. 
+                    concat_index.append(0)
+            concat_index.extend(sorted_index[1])
+            debugw(sorted_index[1])
+            prevlastindex = sorted_index[1][-1]
+
+        debugw(concat_index)
+
+        concat_index = []
+        final_idx = []
+        for sorted_index in sorted_indexes:
+            for posidx in range(0,len(sorted_index[1])):
+                reduce = 0
+                for previndex in concat_index:
+                    if (sorted_index[1][posidx] > previndex):
+                        reduce -= 1
+                final_idx.append(sorted_index[1][posidx] + reduce)
+            concat_index.extend(sorted_index[1])
+            debugw(sorted_index[1])
+            prevlastindex = sorted_index[1][-1]
+
+        debugw(final_idx)
+        
+        avg1 = 0
+        avg2 = 0
+        
+        # before wheeler
+        idx_tot = 0
+        for (key,indexes) in posit_idx2.items():
+            #print(np.std(indexes))
+            avg1 += np.std(indexes)
+            idx_tot += 1
+        debugw(avg1/idx_tot)
+        
+        
+        # after wheeler
+        idx_tot = 0
+        debugw("after_bwt_std")      
+        for (key,indexes) in posit_idx.items():
+            #print(np.std(indexes))
+            avg2 += np.std(indexes) 
+            idx_tot += 1
+        debugw(avg2/idx_tot)
+        idx_tot = 0
+
+        
+        for (key,indexes) in posit_idx2.items():
+            #print(np.std(indexes))
+            upbound = 0
+            x = []
+            for i in range(0,len(indexes)):
+                x.append(i)
+                upbound = i
+            debugw(str(key))
+            plt.style.use('_mpl-gallery')
+            debugw(str(key))
+            fig, ax = plt.subplots()
+            debugw(str(key))
+            ax.plot(x, indexes, linewidth=1.0)
+            debugw(str(key))
+            ax.set(xlim=(0, upbound), xticks=np.arange(1, upbound),
+            ylim=(0, indexes[upbound]), yticks=np.arange(0, indexes[upbound],100))
+            debugw(str(key))
+            plt.savefig('distrib_nonbwt' + str(key) + '.png')
+        """
+        
+        ## index compression
+        ## list absent chars + sep "\x0\x0"
+        ## concatenate indexes. usually a decrease signals jump to next char index list. if not add
+        ## chr(0) between to signal it. all indexes should be shifted + 1.
+        ## now delta encode.
 
         # write compressed binary stream to file if supplied in args or to stdout otherwise.
         if(len(outfile)):
             with open(outfile, 'wb') as fh:
-                fh.write(compressed2)
+                fh.write(compressed4)
         else:
-            sys.stdout.buffer.write(compressed2)
+            sys.stdout.buffer.write(compressed4)
 
         for sessidx in range(2113664,unknown_token_idx):
             debugw("session_index:" + str(sessidx))
@@ -1675,13 +1915,13 @@ if (compress):
             debugw(engdictrev[engdict[sessidx]])
             debugw("session_index:" + str(sessidx))
 
-        
+        """
         print("final entropy:")
         print(frequency_dic2)
         print("final sorted:")
         for key,value in sorted(frequency_dic2.items()):
             print(key,value)
-
+        """
     fh.close()
 
 # decompress mode

@@ -629,7 +629,7 @@ debugw(codec_all.get_code_table())
 
 def bwt_encode(byte_array, eof):
     # Add EOF character to the end of the input
-    byte_array.append(eof)
+    byte_array.extend(eof)
 
     # Create a list of rotations
     rotations = [byte_array[i:] + byte_array[:i] for i in range(len(byte_array))]
@@ -707,7 +707,10 @@ def replace_repeating_chars(byte_array, n, separator):
         else:
             if count >= n:
                 # Replace repetitions with encoded value
-                encoded_value = bytes([current_char, separator, count])
+                encoded_value = bytearray(current_char.to_bytes(1,'little'))
+                encoded_value.extend(separator)
+                encoded_value.append(count.to_bytes(1,'little'))
+                #encoded_value = bytes([current_char, separator, count])
                 result_array.extend(encoded_value)
                 debugw("encoded value:")
                 debugw("".join([f"\\x{byte:02x}" for byte in encoded_value]))
@@ -745,7 +748,8 @@ def find_absent_sequences(byte_array, n):
 
     for seq in all_possible_sequences:
         if seq not in present_sequences:
-            absent_sequences.append(seq)
+            tmp_abs = bytearray(seq)
+            absent_sequences.append(tmp_abs)
             count += 1
             if count >= n:
                 break
@@ -1427,6 +1431,9 @@ def replace_candidates_in_processed(candidates,processed):
 
     byteshift = 0
     shiftcode = 0
+    debugw("total candidates to replace:")
+    debugw(len(candidates))
+    candidate_idx = 0
     for candidate in candidates:
             insertpos = candidate[1] - byteshift
             removebytes = candidate[2]
@@ -1438,16 +1445,51 @@ def replace_candidates_in_processed(candidates,processed):
             # now we convert our shifted ngram code to a byte sequence in the compressed format
             bytes_shiftedcode = shifted_code.to_bytes(3, byteorder='little')
             # print it
-            debugw(bytes_shiftedcode)
+            #debugw(bytes_shiftedcode)
             # tweak the bytes to insert reserved bits for 1/2/3 bytes variable length encoding
             # compliance.
             bytes_shiftedcode = ngram_insert_reserved_bits(bytes_shiftedcode)
             # print it
-            debugw(bytes_shiftedcode)
+            #debugw(bytes_shiftedcode)
             # now we insert it at the position of the non-compressed ngram
             processed[insertpos:insertpos] = bytes_shiftedcode
             # we added 3 bytes, we have to compensate to keep future insertpos valid.
             byteshift -= 3
+            candidate_idx += 1
+            debugw("replaced candidate: " + str(candidate_idx) + " of: " + str(len(candidates)))
+
+    return processed
+
+def replace_candidates_in_processed_v2(candidates,processed):
+
+    byteshift = 0
+    shiftcode = 0
+    debugw("total candidates to replace:")
+    debugw(len(candidates))
+    candidate_idx = 0
+    for candidate in candidates:
+            insertpos = candidate[1] - byteshift
+            removebytes = candidate[2]
+            #del processed[insertpos:insertpos + removebytes]
+            byteshift += removebytes
+            ## first we need to convert candidate code to proper 3 byte format
+            # we add our 4 ngram code space at a 2^20 shift in the 3 bytes address space. 
+            shifted_code = 524416 + candidate[0]
+            # now we convert our shifted ngram code to a byte sequence in the compressed format
+            bytes_shiftedcode = shifted_code.to_bytes(3, byteorder='little')
+            # print it
+            #debugw(bytes_shiftedcode)
+            # tweak the bytes to insert reserved bits for 1/2/3 bytes variable length encoding
+            # compliance.
+            bytes_shiftedcode = ngram_insert_reserved_bits(bytes_shiftedcode)
+            # print it
+            #debugw(bytes_shiftedcode)
+            # now we insert it at the position of the non-compressed ngram
+            processed[insertpos:insertpos + removebytes] = bytes_shiftedcode
+            # we added 3 bytes, we have to compensate to keep future insertpos valid.
+            byteshift -= 3
+            candidate_idx += 1
+            debugw("replaced candidate: " + str(candidate_idx) + " of: " + str(len(candidates)))
 
     return processed
 
@@ -1717,9 +1759,10 @@ if (compress):
             processed_candidates = process_candidates_v2(candidates)
             debugw("processed candidates:")
             debugw(processed_candidates)
-            compressed = replace_candidates_in_processed(processed_candidates,compressed)
-
-
+            #compressed = replace_candidates_in_processed(processed_candidates,compressed)
+            compressed = replace_candidates_in_processed_v2(processed_candidates,compressed)
+            debugw("end process candidates.")
+        
         frequency = Counter(compressed).most_common()
         frequency_dic = {}
 
@@ -1753,17 +1796,26 @@ if (compress):
 
         debugw("asbent seq:")
         debugw(abs_seq)
-        quit()
+        
 
 
-        (compressed3, orig_idx) = bwt_encode(compressed,abs_chars[0])
+        #(compressed3, orig_idx) = bwt_encode(compressed,abs_chars[0])
+        (compressed3, orig_idx) = bwt_encode(compressed,abs_seq[0])
+        
         compressed3 = bytearray(compressed3)
 
         debugw("wheeler:")
         debugw(len(compressed3))
 
-        #repeats = find_repeating_chars(compressed3,4)
-        compressed3 = replace_repeating_chars(compressed3,4,abs_chars[1])
+        repeats = find_repeating_chars(compressed3,5)
+
+        debugw("repeats:")
+        debugw(len(compressed3))
+
+
+        #compressed3 = replace_repeating_chars(compressed3,4,abs_chars[1])
+        compressed3 = replace_repeating_chars(compressed3,5,abs_seq[1])
+        
         debugw("orig_idx")
         debugw(orig_idx)
 

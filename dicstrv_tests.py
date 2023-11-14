@@ -172,6 +172,7 @@ import traceback
 from collections import Counter, OrderedDict
 import numpy as np
 from matplotlib import pyplot as plt
+from itertools import cycle,islice
 
 #print(len(sys.argv))
 #op = (sys.argv[1]).encode("ascii").decode("ascii")
@@ -657,14 +658,22 @@ def bwt_encode(byte_array, eof):
     return bwt_result, original_index
 
 def bwt_decode(bwt_result, original_index, eof):
-    # Create a list of empty strings
-    table = [''] * len(bwt_result)
-
-    # Fill in the table with the sorted rotations
-    for i in range(len(bwt_result)):
-        for j in range(len(bwt_result[i])):
-            table[j] = bwt_result[i][j] + table[j]
-
+    
+ 
+    table = [[None] * len(bwt_result) for i in range(len(bwt_result))] 
+ 
+    # Fill in the table with the sorted rotations 
+    cycle_bwt = cycle(bwt_result) 
+    for i in range(len(bwt_result)): 
+        j = 0 
+        for item in cycle_bwt: 
+            table[i][j] = item 
+            j += 1 
+            if(j==len(bwt_result)): 
+                    break 
+        cycle_bwt = islice(cycle_bwt, 1, None) 
+    
+    print(original_index)
     # Find the original string by locating the row that ends with the EOF character
     decoded = table[original_index].rstrip(eof)
 
@@ -706,7 +715,10 @@ def replace_repeating_chars(byte_array, n, separator):
             count += 1
         else:
             if count >= n:
-                # Replace repetitions with encoded value
+                # Replace repetitions with encoded value (repeated byte value + separator (maybe one or more bytes, that do not appear
+                # in the stream) + total repetition count encoded on one byte (count <255) 
+                # or two bytes(two bytes for count<65535, + one byte at 255 to signal encoding on two bytes)
+
                 encoded_value = bytearray(current_char.to_bytes(1,'little'))
                 encoded_value.extend(separator)
                 if (count < 255):
@@ -1619,6 +1631,56 @@ def decompress_ngram_bytes(compressed):
 
     return detokenizer_ngram
 
+def Decode_Huffmann_RLE_BWT(compressed):
+
+    # Huffmann decode first
+    final_pass_codec = HuffmanCodec.load("huffmann_final_pass.bin")
+    compressed = final_pass_codec.decode(compressed)
+    #Interpret Header
+    next_header_idx = 0
+    if (compressed[0] == bytearray(b'\xFF')):
+        rle_sep = bytearray(compressed[1:3])
+        bwt_eof = bytearray(compressed[3:5])
+        next_header_idx = 5
+    else:
+        rle_sep = bytearray(compressed[0]) # xFF forbidden as RLE sep.
+        bwt_eof = bytearray(compressed[1])
+        next_header_idx = 2
+
+
+    if compressed[next_header_idx:next_header_idx+2] == bytearray(b'\xFF\xFF'):
+            next_header_idx += 2
+            orig_idx = int.from_bytes(compressed[next_header_idx:next_header_idx+3], 'little')
+            next_header_idx += 3
+    elif compressed[next_header_idx:next_header_idx+1] == bytearray(b'\xFF'):
+            next_header_idx += 1
+            orig_idx = int.from_bytes(compressed[next_header_idx:next_header_idx+2], 'little')
+            next_header_idx += 2
+    else:
+            orig_idx = int.from_bytes(compressed[next_header_idx:next_header_idx+1], 'little')
+            next_header_idx += 1             
+    
+    compressed_new = bytearray()
+    #now restore repeating chars
+    for idx in range(next_header_idx+1,len(compressed)):  # there is always a character left of separator, the repeated byte, hence next_header_idx+1  
+        if compressed[idx:idx+len(rle_sep)] == rle_sep:
+            print("separator found")
+            rep_char = compressed[idx-1]
+            if compressed[idx+len(rle_sep):idx+len(rle_sep)+2] == bytearray(b'\xFF\xFF'):
+                rep_num = int.from_bytes(compressed[idx+len(rle_sep)+2:idx+len(rle_sep)+5], 'little')
+            if compressed[idx+len(rle_sep):idx+len(rle_sep)+1] == bytearray(b'\xFF'):
+                rep_num = int.from_bytes(compressed[idx+len(rle_sep)+2:idx+len(rle_sep)+4], 'little')
+            else:
+                rep_num = int.from_bytes(compressed[idx+len(rle_sep)+2:idx+len(rle_sep)+3], 'little')
+            replace_with_bytes = bytearray(rep_char[0]) * rep_num
+            compressed_new.extend(replace_with_bytes)
+        else:
+            compressed_new.append(compressed[idx-1])
+
+    #now do inverse bwt
+    print(len(compressed_new))
+    compressed_new2 = bwt_decode(compressed_new,orig_idx,bwt_eof)
+    return compressed_new2
 
 ###INLINE START###
 
@@ -1797,9 +1859,13 @@ if (compress):
         debugw(abs_chars)
 
         abs_seq = []
-        if(not len(abs_chars)):
+        if(len(abs_chars) < 2):
+            debugw("no two single byte absent chars were found in compressed stream")
             abs_seq = find_absent_sequences(compressed,2)
-
+        else:
+            debugw("at least two single byte absent chars were found in compressed stream")
+            abs_seq.append(bytearray((abs_chars[0]).to_bytes(1,'little')))
+            abs_seq.append(bytearray((abs_chars[1]).to_bytes(1,'little')))
         debugw("asbent seq:")
         debugw(abs_seq)
         
@@ -1837,8 +1903,14 @@ if (compress):
             
         #compressed3[:0] = bytearray((abs_chars[0]).to_bytes(1,'little')) # prepend BWT eof
         #compressed3[:0] = bytearray((abs_chars[1]).to_bytes(1,'little')) # prepend RLE separator
+
         compressed3[:0] = abs_seq[0] # prepend BWT eof
-        compressed3[:0] = abs_seq[1] # prepend RLE separator        
+        compressed3[:0] = abs_seq[1] # prepend RLE separator       
+
+        if(len(abs_chars) < 2):
+            # BWT and EOF are encoded on 2 bytes each instead of 1.
+            # We need to signal this, also xFF is a forbidden separator. TODO
+            compressed3[:0] = bytearray(b'\xFF') # prepend BWT eof 
 
         debugw("rle:")
         debugw(len(compressed3))
@@ -1998,6 +2070,14 @@ else:
     if(len(infile)):
         with open(infile, 'rb') as fh:
             compressed = bytearray(fh.read())
+
+    #First we need to retrieve the preamble/header (separators)
+    #and apply operations in reverse :
+    # 1- huffmann final pass decode
+    # 2- RLE decode
+    # 3- BWT
+
+    compressed = Decode_Huffmann_RLE_BWT(compressed)
 
     idx = 0
     #FirstCharOfLine = 1

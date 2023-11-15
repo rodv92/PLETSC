@@ -626,8 +626,161 @@ codec_all_whitespace = HuffmanCodec.from_frequencies(
 
 
 debugw(codec_all.get_code_table())
-#quit()   
+#quit()
+#
 
+def restore_unused_chars_shiftup(unused_char,compressed):
+    # works in-place
+    #we need to restore original sequence after bwt_decode, knowing the highest unused char number.
+    #in our case, simple byte sorting by value, not lexicographic as we are working on the full ASCII range
+    
+    compzip = zip(range(0,len(compressed)),compressed)
+    for byte_and_pos in compzip:
+        if (byte_and_pos[1] >= unused_char):            
+            compressed[byte_and_pos[0]] += 1            
+    return compressed
+    
+    # compress bytearray modified in place, no need to return it
+
+
+
+
+def reuse_unused_chars_shiftdown(compressed):
+    # works in-place
+    #we need to ensure that byte 255 is unused for BWT (used as eof) because of lexicographic constraints
+    #in our case, simple byte sorting by value, not lexicographic as we are working on the full ASCII range
+
+    frequency = Counter(compressed).most_common()
+    frequency_dic = {}
+
+    for (ascii_code, count) in frequency:
+        frequency_dic[ascii_code] = count
+    
+    abs_chars = []
+
+    for charval in range(255,0,-1):
+        if (charval == 255) and (charval not in frequency_dic.keys()):
+            return(charval,compressed)
+        if charval not in frequency_dic.keys():
+            abs_chars = abs_chars + [charval]
+
+    first_unused = abs_chars[0]
+
+    if(len(abs_chars)):
+
+        compzip = zip(range(0,len(compressed)),compressed)
+        for byte_and_pos in compzip:
+
+            if (byte_and_pos[1] > first_unused):
+
+                compressed[byte_and_pos[0]] -= 1
+                print(compressed[byte_and_pos[0]])
+             
+        return first_unused
+    else:
+        return -1
+    # compress bytearray modified in place, no need to return it
+
+
+def suffixArray(s):
+    #''' creation du suffixe array avec leurs rangs ordonnés ''' 
+    satups = sorted([(s[i:], i) for i in range(0, len(s)+1)])
+    return map(lambda x: x[1], satups)
+
+def bwt_encode(t,eof):
+    ''' transformation de Burrow-wheeler ''' 
+    bw = bytearray()
+    for si in suffixArray(t):
+        if si == 0:
+            bw.extend(eof)
+        else:
+            bw.append(t[si-1])
+            #bw.append(t[si-len(eof)])
+    return bw    
+
+def rankBwt(bw):
+    ''' Retourne les rangs ''' 
+    tots = dict()
+    ranks = []
+    for c in bw:
+        if c not in tots:
+            tots[c] = 0
+        ranks.append(tots[c])
+        tots[c] += 1
+    return ranks, tots
+
+
+def firstCol(tots):
+    ''' retourne la premiere colonne ''' 
+    first = {}
+    totc = 0
+    for c, count in sorted(tots.items()):
+        first[c] = (totc, totc + count)
+        totc += count 
+    return first # returns dictionary of lexicographic order key = character value, dic val = (index_start,index_end (excluded))
+
+def bwt_decode(bw,eof):
+    ''' Retourne le texte original de la transformation bw '''
+    ranks, tots = rankBwt(bw)
+    first = firstCol(tots)
+    
+    rowi = 0
+    t= bytearray()
+    t.extend(eof)
+    
+    while (int.from_bytes(bw[rowi:rowi+len(eof)],'little') !=  int.from_bytes(eof,'little')):
+        c = bw[rowi]
+        t[:0] = bytearray(c.to_bytes(1,'little'))        
+        rowi = first[c][0] + ranks[rowi] + 1
+
+
+    
+    del(t[-len(eof):])
+    return t
+
+
+def reuse_unused_chars_shiftdown(compressed):
+    # works in-place
+    #we need to ensure that byte 255 is unused for BWT (used as eof) because of lexicographic constraints
+    #in our case, simple byte sorting by value, not lexicographic as we are working on the full ASCII range
+    # we also need another byte to be free as a rle separator, so we return it. - no need to shift for this
+    # one, just return it in abs_chars
+
+    frequency = Counter(compressed).most_common()
+    frequency_dic = {}
+
+    for (ascii_code, count) in frequency:
+        frequency_dic[ascii_code] = count
+    
+    abs_chars = []
+
+    for charval in range(255,0,-1):
+        if (charval == 255) and (charval not in frequency_dic.keys()):
+            abs_chars = abs_chars + [charval]
+        if (charval == 254) and (charval not in frequency_dic.keys()):
+            abs_chars = abs_chars + [charval]
+            return abs_chars
+        if charval not in frequency_dic.keys():
+            abs_chars = abs_chars + [charval]
+        if (len(abs_chars) >= 2):
+            break
+
+
+    if(len(abs_chars) >= 2):
+
+        highest_abs_char = abs_chars[0]
+        
+        compzip = zip(range(0,len(compressed)),compressed)
+        for byte_and_pos in compzip:
+            if (byte_and_pos[1] > highest_abs_char):
+                compressed[byte_and_pos[0]] -= 1
+
+        return abs_chars
+    else:
+        return [-1]
+    # compressed modified in place, no need to return. return -1 if there are less than two absent chars.
+
+"""
 def bwt_encode(byte_array, eof):
     # Add EOF character to the end of the input
     byte_array.extend(eof)
@@ -675,9 +828,16 @@ def bwt_decode(bwt_result, original_index, eof):
     
     print(original_index)
     # Find the original string by locating the row that ends with the EOF character
-    decoded = table[original_index].rstrip(eof)
+    try:
+        eof_index = (table[original_index]).index(eof)
+        del(table[original_index][eof_index])
+        decoded = table[original_index]
+    except:
+        debugw("eof not found in bwt")
+        decoded = []
 
     return decoded
+"""
 
 def find_repeating_chars(byte_array, n):
     repeating_chars = {}
@@ -1637,49 +1797,72 @@ def Decode_Huffmann_RLE_BWT(compressed):
     final_pass_codec = HuffmanCodec.load("huffmann_final_pass.bin")
     compressed = final_pass_codec.decode(compressed)
     #Interpret Header
+    debugw("compressed[0]")
+    debugw(compressed[0])
+
     next_header_idx = 0
     if (compressed[0] == bytearray(b'\xFF')):
-        rle_sep = bytearray(compressed[1:3])
-        bwt_eof = bytearray(compressed[3:5])
+        rle_sep = bytearray((compressed[1:3]).to_bytes(2,"little"))
+        bwt_eof = bytearray((compressed[3:5]).to_bytes(2,"little"))
         next_header_idx = 5
     else:
-        rle_sep = bytearray(compressed[0]) # xFF forbidden as RLE sep.
-        bwt_eof = bytearray(compressed[1])
+        rle_sep = bytearray((compressed[0]).to_bytes(1,"little")) # xFF forbidden as RLE sep.
+        bwt_eof = bytearray((compressed[1]).to_bytes(1,"little"))
         next_header_idx = 2
 
+    debugw("rle_sep")
+    debugw(rle_sep)
+    debugw("bwt_eof")
+    debugw(bwt_eof)
 
-    if compressed[next_header_idx:next_header_idx+2] == bytearray(b'\xFF\xFF'):
+    if (int.from_bytes(compressed[next_header_idx:next_header_idx+2],'little') == 65535):
+            debugw(compressed[next_header_idx:next_header_idx+2])
+            debugw("orig_idx on 3 bytes")
             next_header_idx += 2
             orig_idx = int.from_bytes(compressed[next_header_idx:next_header_idx+3], 'little')
             next_header_idx += 3
-    elif compressed[next_header_idx:next_header_idx+1] == bytearray(b'\xFF'):
+    elif (int.from_bytes(compressed[next_header_idx:next_header_idx+1],'little') == 255):
+            debugw(compressed[next_header_idx:next_header_idx+1])
+            debugw("orig_idx on 2 bytes")
             next_header_idx += 1
             orig_idx = int.from_bytes(compressed[next_header_idx:next_header_idx+2], 'little')
             next_header_idx += 2
     else:
+            debugw(compressed[next_header_idx:next_header_idx+1])
+            debugw("orig_idx on 1 bytes")
             orig_idx = int.from_bytes(compressed[next_header_idx:next_header_idx+1], 'little')
             next_header_idx += 1             
-    
+
+    debugw("orig_idx")
+    debugw(orig_idx)
+
+
     compressed_new = bytearray()
     #now restore repeating chars
     for idx in range(next_header_idx+1,len(compressed)):  # there is always a character left of separator, the repeated byte, hence next_header_idx+1  
-        if compressed[idx:idx+len(rle_sep)] == rle_sep:
+        
+        debugw("compressed_slice")
+        debugw(int.from_bytes(compressed[idx:idx+len(rle_sep)],'little'))
+ 
+        if (int.from_bytes(compressed[idx:idx+len(rle_sep)],'little') == int.from_bytes(rle_sep,'little')):
             print("separator found")
             rep_char = compressed[idx-1]
-            if compressed[idx+len(rle_sep):idx+len(rle_sep)+2] == bytearray(b'\xFF\xFF'):
+            print("rep_char")
+            
+            if (int.from_bytes(compressed[idx+len(rle_sep):idx+len(rle_sep)+2],'little') == 65535):
                 rep_num = int.from_bytes(compressed[idx+len(rle_sep)+2:idx+len(rle_sep)+5], 'little')
-            if compressed[idx+len(rle_sep):idx+len(rle_sep)+1] == bytearray(b'\xFF'):
+            if (int.from_bytes(compressed[idx+len(rle_sep):idx+len(rle_sep)+1],'little') == 255):
                 rep_num = int.from_bytes(compressed[idx+len(rle_sep)+2:idx+len(rle_sep)+4], 'little')
             else:
                 rep_num = int.from_bytes(compressed[idx+len(rle_sep)+2:idx+len(rle_sep)+3], 'little')
-            replace_with_bytes = bytearray(rep_char[0]) * rep_num
+            replace_with_bytes = bytearray(rep_char.to_bytes(1,'little')) * rep_num
             compressed_new.extend(replace_with_bytes)
         else:
             compressed_new.append(compressed[idx-1])
 
     #now do inverse bwt
     print(len(compressed_new))
-    compressed_new2 = bwt_decode(compressed_new,orig_idx,bwt_eof)
+    compressed_new2 = bwt_decode(compressed_new,bwt_eof)
     return compressed_new2
 
 ###INLINE START###
@@ -1842,7 +2025,7 @@ if (compress):
         #key_idx = 0
         
         
-        abs_chars = []
+        
         #for key,value in sorted(frequency_dic2.items()):
         #    if key != key_idx:
         #        debugw("absent char!: "+ str(key_idx) + ", use as EOF for bwt")
@@ -1850,6 +2033,14 @@ if (compress):
         #        #break
         #    key_idx += 1
 
+
+
+        # for now we simplify the use case where there are at least two absent chars in the compressed
+        # bin stream, which happens quite a lot for short to medium original text inputs.
+
+        '''
+        abs_chars = []
+        
 
         for charval in range(0,256):
             if charval not in frequency_dic.keys():
@@ -1868,29 +2059,39 @@ if (compress):
             abs_seq.append(bytearray((abs_chars[1]).to_bytes(1,'little')))
         debugw("asbent seq:")
         debugw(abs_seq)
-        
+        '''
 
 
-        #(compressed3, orig_idx) = bwt_encode(compressed,abs_chars[0])
-        (compressed3, orig_idx) = bwt_encode(compressed,abs_seq[0])
-        
-        compressed3 = bytearray(compressed3)
 
-        debugw("wheeler:")
-        debugw(len(compressed3))
+        absent_chars = reuse_unused_chars_shiftdown(compressed)
 
-        repeats = find_repeating_chars(compressed3,5)
+        #orig_idx = 0
+        if(absent_chars != [-1]): # if there are less than 2 absent chars, we perform neighter bwt or rle
 
-        debugw("repeats:")
-        debugw(len(compressed3))
+            compressed3 = bwt_encode(compressed,bytearray(b'\xFF')) # 255 is always the bwt eof.
+            compressed3 = bytearray(compressed3)
+
+            debugw("wheeler:")
+            debugw(len(compressed3))
+
+            repeats = find_repeating_chars(compressed3,5)
+
+            debugw("number of repeats:")
+            debugw(len(repeats))
+
+            #compressed3 = replace_repeating_chars(compressed3,4,abs_chars[1])
+            # RLE format repeated char + separator + number of repeats
+            # repeated_char cannot be equal to separator, which is a non issue since it is an absent char.
+            # however there is the case where the number of repeats is equal to the separator.
+            # in that case, two contiguous identical bytes to the separators will appear.
+            # the second separator should not be treated as such in the scan.
+            compressed3 = replace_repeating_chars(compressed3,5,absent_chars[1])
 
 
-        #compressed3 = replace_repeating_chars(compressed3,4,abs_chars[1])
-        compressed3 = replace_repeating_chars(compressed3,5,abs_seq[1])
-        
-        debugw("orig_idx")
-        debugw(orig_idx)
+        else:
+            debugw("not a single absent char, not performing wheeler and rle")
 
+        '''
         if(orig_idx < 255):
             compressed3[:0] = bytearray(orig_idx.to_bytes(1, 'little'))
         elif(orig_idx < 65535):
@@ -1900,17 +2101,21 @@ if (compress):
             compressed3[:0] = bytearray(orig_idx.to_bytes(3, 'little'))
             compressed3[:0] = bytearray(b'\xFF')
             compressed3[:0] = bytearray(b'\xFF')
-            
+        '''    
         #compressed3[:0] = bytearray((abs_chars[0]).to_bytes(1,'little')) # prepend BWT eof
         #compressed3[:0] = bytearray((abs_chars[1]).to_bytes(1,'little')) # prepend RLE separator
 
-        compressed3[:0] = abs_seq[0] # prepend BWT eof
-        compressed3[:0] = abs_seq[1] # prepend RLE separator       
+        #compressed3[:0] = abs_seq[0] # prepend BWT eof
+        #compressed3[:0] = abs_seq[1] # prepend RLE separator       
+        
+        compressed3[:0] = absent_chars[1] # prepend RLE separator       
 
-        if(len(abs_chars) < 2):
-            # BWT and EOF are encoded on 2 bytes each instead of 1.
-            # We need to signal this, also xFF is a forbidden separator. TODO
-            compressed3[:0] = bytearray(b'\xFF') # prepend BWT eof 
+        if(absent_chars != [-1]):
+            compressed3[:0] = bytearray(b'\xFF') # prepend BWT eof to signal use of bwt+rle TODO: use bit flags    
+            compressed3[:0] = absent_chars[1] # prepend RLE separator       
+
+        else:
+            compressed3[:0] = bytearray(b'\x00') # 0 to signal neither bwt or rle was performed.
 
         debugw("rle:")
         debugw(len(compressed3))

@@ -68,12 +68,31 @@ The 3 byte address space is split in two :
 
 Currently, Work is being on done on further improving compression by :
 
-- Third stage : Applying a Burrows-Wheeler Transform to the output of the second pass,
-- Fourth stage : A byte based RLE, using absent one or two byte sequences from previous stage as separators
-- And finally a huffmann encoding pass trained on averaged binary files states from the second pass. 
+- Third stage : Applying a Burrows-Wheeler Transform to the output of the second pass, this needs to have
+the character \xFF free as EOF. So we check for any absent chars below in the ASCII space from the
+previous stage, take the highest absent, and shift all characters ascii codes above one step down.
+
+- Fourth stage : A byte based RLE, using an absent byte as separator from the second pass.
+
+Obviously fourth stage needs third stage to be effective, which means that there needs to be at least 2 absent characters in the second pass. If this requirement is not met bwt and rle won't be attempted.
+Usually, smallish to medium size texts or messages will have available chars.
+For lager texts, this won't be the case, and TODO : a multiple character separator could be envisionned, since repetitions will also increase in size. However using a multiple character EOF in the BWT needs special attention.
+
+- Fifth stage : prepending the header to the file/stream.
+It consists, for the first byte
+  - xFF to signify the use of BWT+RLE (todo : use flags for more configurations options)
+  or
+  - x00 : no BWT or RLE
+
+then if the first byte is xFF. the next byte is the RLE separator, and next is the absent byte above which all ascii chars in the stream before BWT were shifted down, so that xFF is free. xFF is the bwt EOF.
+
+
+- And finally a huffmann encoding that will be trained on averaged binary files states from the second pass. It's compression efficiency is expected to be significantly reduced since RLE took care of repeating chars over a number of 4 repetitions, but should still be useful, some repetitions are < 4, some repetitions are disjointed, etc...
+
   (file with the huffmann tree is huffmann_final_pass.bin)
 
 - Creating a preamble containing separators (to use in third and fourth stages) to use for decompression as well as various other informations required to decompress.
+
 
 
 # Performance :

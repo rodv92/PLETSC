@@ -645,42 +645,6 @@ def restore_unused_chars_shiftup(unused_char,compressed):
 
 
 
-def reuse_unused_chars_shiftdown(compressed):
-    # works in-place
-    #we need to ensure that byte 255 is unused for BWT (used as eof) because of lexicographic constraints
-    #in our case, simple byte sorting by value, not lexicographic as we are working on the full ASCII range
-
-    frequency = Counter(compressed).most_common()
-    frequency_dic = {}
-
-    for (ascii_code, count) in frequency:
-        frequency_dic[ascii_code] = count
-    
-    abs_chars = []
-
-    for charval in range(255,0,-1):
-        if (charval == 255) and (charval not in frequency_dic.keys()):
-            return(charval,compressed)
-        if charval not in frequency_dic.keys():
-            abs_chars = abs_chars + [charval]
-
-    first_unused = abs_chars[0]
-
-    if(len(abs_chars)):
-
-        compzip = zip(range(0,len(compressed)),compressed)
-        for byte_and_pos in compzip:
-
-            if (byte_and_pos[1] > first_unused):
-
-                compressed[byte_and_pos[0]] -= 1
-                print(compressed[byte_and_pos[0]])
-             
-        return first_unused
-    else:
-        return -1
-    # compress bytearray modified in place, no need to return it
-
 
 def suffixArray(s):
     #''' creation du suffixe array avec leurs rangs ordonnés ''' 
@@ -766,7 +730,7 @@ def reuse_unused_chars_shiftdown(compressed):
             break
 
 
-    if(len(abs_chars) >= 2):
+    if(len(abs_chars) == 2):
 
         highest_abs_char = abs_chars[0]
         
@@ -2111,9 +2075,10 @@ if (compress):
         compressed3[:0] = absent_chars[1] # prepend RLE separator       
 
         if(absent_chars != [-1]):
-            compressed3[:0] = bytearray(b'\xFF') # prepend BWT eof to signal use of bwt+rle TODO: use bit flags    
+            compressed3[:0] = absent_chars[0] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
             compressed3[:0] = absent_chars[1] # prepend RLE separator       
-
+            compressed3[:0] = bytearray(b'\xFF') # prepend BWT eof to signal use of bwt+rle TODO: use bit flags    
+            
         else:
             compressed3[:0] = bytearray(b'\x00') # 0 to signal neither bwt or rle was performed.
 

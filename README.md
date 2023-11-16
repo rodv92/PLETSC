@@ -56,8 +56,7 @@ The 3 byte address space is split in two :
   - And the second subspace holds an Ngram dictionary (more on that later).
 - Second part (when byte0 msb is 1 and byte1 msb is 1 and byte2 msb is 1) is further divided into two subspaces.
   - First part is for a session dictionary. A session dictionary is used to hold repeating unknown tokens. there are 2097152 - 5
-  codes available for this use. Initially empty. Kept in ram, it is a SESSION dictionary. This session dictionary should not
-  be required to be sent between two parties, as it can be reconstructed entirely from the compressed stream.
+  codes available for this use. Initially empty. Kept in ram, it is a SESSION dictionary. This session dictionary should not be required to be sent between two parties, as it can be reconstructed entirely from the compressed stream, following the sequence of apparition of unknown words.
   - Second part is only 5 codes, (TODO, for now just 1 code, and switch between Huffmann and no compression is done in a bool parameter) It is an escape sequence meaning that following bytes will be encoded wit the following methods :
     - first code : As a stream of chars (no compression), plus a C style termination (chr(0)).
     - second code : Huffmann encoding, lowercase only.
@@ -78,7 +77,8 @@ Obviously fourth stage needs third stage to be effective, which means that there
 Usually, smallish to medium size texts or messages will have available chars.
 For lager texts, this won't be the case, and TODO : a multiple character separator could be envisionned, since repetitions will also increase in size. However using a multiple character EOF in the BWT needs special attention.
 
-- Fifth stage : prepending the header to the file/stream.
+- Fifth stage : prepending the header to the file/stream, to inform on how to decompress the file/stream.
+
 It consists, for the first byte
   - xFF to signify the use of BWT+RLE (todo : use flags for more configurations options)
   or
@@ -87,17 +87,22 @@ It consists, for the first byte
 then if the first byte is xFF. the next byte is the RLE separator, and next is the absent byte above which all ascii chars in the stream before BWT were shifted down, so that xFF is free. xFF is the bwt EOF.
 
 
-- And finally a huffmann encoding that will be trained on averaged binary files states from the second pass. It's compression efficiency is expected to be significantly reduced since RLE took care of repeating chars over a number of 4 repetitions, but should still be useful, some repetitions are < 4, some repetitions are disjointed, etc...
+- And finally a huffmann encoding that will be trained on averaged binary files states from the second pass. Its compression efficiency is expected to be reduced since RLE took care of repeating chars over a number of 4 repetitions, but should still be useful, some repetitions are < 4, some repetitions are disjointed, etc...
 
-  (file with the huffmann tree is huffmann_final_pass.bin)
+TODO : make the last pass huffmann tree adaptive : 
+It should follow the shift of ASCII codes down in third stage just before BWT. Since we have the unused char information in the header, this should be trivial and improve compression somewhat.
+The highest gain would be if the unused char is really low in the ascii table, which should not happen,
+as these reflect super frequent tokens. ex ASCII code x01 = 'the' in count1_w.txt would probably be used and show after pass 2.
+This would mainly help for 'pathological' texts/messages.
 
-- Creating a preamble containing separators (to use in third and fourth stages) to use for decompression as well as various other informations required to decompress.
 
-
+The file with the huffmann tree for the final pass is "huffmann_final_pass.bin"
+it has been trained on a really limited number of second pass data, so there is room to get less context
+sensitive (more averaged) results.
 
 # Performance :
 
-It offers a good compression ratio (between 2.6 and 3.0+), That is, Sizes in % of ORIGINAL size of around 33% to 38%, mainly depending on the lexical complexity or lexical archaism of the source text, and presence of unkwnown or misspelled words.
+It offers a good compression ratio (between 2.6 and 3.4+), That is, sizes in % of ORIGINAL size of around 29% to 38%, mainly depending on the lexical complexity or lexical archaism of the source text, and presence of unkwnown or misspelled words.
 
 A higher lexical complexity, or archaic texts, that is, if the input text uses less common words – based on current usage – (2023), will yield lower compression ratios.
 
@@ -137,8 +142,7 @@ Input text file must be ASCII (for now) or UTF-8 decodable to ASCII (English). I
 Decoded file will be encoded in ASCII.
 It should be in English to get adequate conversion.
 
-Both ends (sender and receiver) MUST have the SAME dictionaries and the SAME Huffmann tables, as these are not sent with 
-the data.
+Both ends (sender and receiver) MUST have the SAME dictionaries and the SAME Huffmann tables (including huffmann_final_pass.bin), as these are not sent with the data.
 
 # Information about the dictionaries
 
@@ -174,14 +178,11 @@ If there is no Internet access, and the RX side doesn't have the dictionaries or
 
 See comments in the code.
 
-Main issues for now are syntactic rules and spurious whitespaces, absence of whitespaces were they should have been,
-problems with hyphenated tokens, spurious newlines, problems with some possessive forms, and special constructs
-besides emails and well formed URLs.
+Main issues for now are syntactic rules and spurious whitespaces, absence of whitespaces were they should have been, problems with hyphenated tokens, spurious newlines, problems with some possessive forms, and special constructs, besides emails and well formed URLs.
 
 # Ngrams Processing from scratch :
 
-Useful if you want to tweak or create your own dictionaries, we'll discuss mainly the outngrams.bin dictionary,
-as count_1w.txt tweaking is straightforward.
+Useful if you want to tweak or create your own dictionaries, we'll discuss mainly the outngrams.bin dictionary, as count_1w.txt tweaking is straightforward.
 Note that count1_w.txt should not be modified once outngrams.bin is generated, or you'll have to rebuild outngrams.bin
 
 A preparatory step is required to generate a compressed version of the ngrams files, if you want to do it from scratch :
@@ -193,7 +194,7 @@ The repo contains scripts that perform the download and concatenation of ngrams 
 Note that LETSC has limited space in the first subspace of the 3 byte. more or less 2097152 - 333333
 I have created an ngram list of 1571125 ngrams. The distribution between the 4grams and 5grams is roughly 50%/50%
 
-The resulting CSV files need to be further processed by our algorithm
+The resulting CSV files need to be further processed by our algorithm.
 
 The script that create outngrams.bin (the secondary compiled dictionary based on the primary dictionary and the ngrams csv files from google-books-ngram) is called ngrams_format_dic.py
 This script is commented for what each line does.

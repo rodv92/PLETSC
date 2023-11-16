@@ -633,10 +633,18 @@ def restore_unused_chars_shiftup(unused_char,compressed):
     # works in-place
     #we need to restore original sequence after bwt_decode, knowing the highest unused char number.
     #in our case, simple byte sorting by value, not lexicographic as we are working on the full ASCII range
-    
+    debugw("unused_char_to_shift_down_into:")
+    debugw(unused_char)
+
+    #handle special case where unused_char is 255 == BWT EOF
+    if(int.from_bytes(unused_char,'little') == 255):
+        debugw("unused char to shift into is 255 == bwt eof. exiting")
+        return
+
+
     compzip = zip(range(0,len(compressed)),compressed)
     for byte_and_pos in compzip:
-        if (byte_and_pos[1] >= unused_char):            
+        if (byte_and_pos[1] >= int.from_bytes(unused_char,'little')):            
             compressed[byte_and_pos[0]] += 1            
     #return compressed
     
@@ -1760,17 +1768,25 @@ def Decode_Huffmann_RLE_BWT(compressed):
     # Huffmann decode first
     final_pass_codec = HuffmanCodec.load("huffmann_final_pass.bin")
     compressed = final_pass_codec.decode(compressed)
+
+    # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
+    checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed])
+    debugw("checkpoint_decompress_after_huffmann")
+    debugw(checkpoint)
+
     #Interpret Header
     debugw("compressed[0]")
     debugw(compressed[0])
 
     next_header_idx = 0
-    if (compressed[0] == bytearray(b'\xFF')):
+    if (compressed[0] == 255):
+        debugw("compressed stream uses BWT and RLE")
         rle_sep = bytearray((compressed[1]).to_bytes(1,"little")) # xFF forbidden as RLE sep.
         bwt_shiftpos = bytearray((compressed[2]).to_bytes(1,"little"))
         next_header_idx += 3
     else:
-        return compressed
+        debugw("compressed stream does not use BWT and RLE")
+        return compressed[1:]
 
     debugw("rle_sep")
     debugw(rle_sep)
@@ -1818,17 +1834,34 @@ def Decode_Huffmann_RLE_BWT(compressed):
                 rep_num = int.from_bytes(compressed[idx+len(rle_sep):idx+len(rle_sep)+1], 'little')
                 jump += 1
 
-            replace_with_bytes = bytearray(rep_char.to_bytes(1,'little')) * rep_num
+            replace_with_bytes = bytearray(rep_char.to_bytes(1,'little')) * (rep_num - 1) # rep_num - 1 ...
+            #because the previous match idx was on the repeated char (in the following else statement)
             compressed_new.extend(replace_with_bytes)
         else:
             compressed_new.append(compressed[idx])
 
-    
+    # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
+    checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed_new])
+    debugw("checkpoint_decompress_after_header_processing_and_rle")
+    debugw(checkpoint)
+
     #now do inverse bwt
     print(len(compressed_new))
+    #compressed_new2 = bwt_decode(compressed[3:],bytearray(b'\xFF'))
     compressed_new2 = bwt_decode(compressed_new,bytearray(b'\xFF'))
+
+    # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
+    checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed_new2])
+    debugw("checkpoint_decompress_after_bwt")
+    debugw(checkpoint)
+
     #shift characters above highest separator value up
     restore_unused_chars_shiftup(bwt_shiftpos,compressed_new)
+
+    # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
+    checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed_new2])
+    debugw("checkpoint_decompress_after_shiftup")
+    debugw(checkpoint)
     
     return compressed_new2
 
@@ -1981,6 +2014,12 @@ if (compress):
             compressed = replace_candidates_in_processed_v2(processed_candidates,compressed)
             debugw("end process candidates.")
         
+        
+        # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+        checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed])
+        debugw("checkpoint_compress after pass 2")
+        debugw(checkpoint)
+        
         frequency = Counter(compressed).most_common()
         frequency_dic = {}
 
@@ -2031,6 +2070,15 @@ if (compress):
 
 
         absent_chars = reuse_unused_chars_shiftdown(compressed)
+        
+
+        # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+        checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed])
+        debugw("checkpoint_compress after shiftdown")
+        debugw(checkpoint)
+
+        # force not to use RLE and BWT
+        #absent_chars =  [-1]
 
         #orig_idx = 0
         if(absent_chars != [-1]): # if there are less than 2 absent chars, we perform neighter bwt or rle
@@ -2038,10 +2086,17 @@ if (compress):
             compressed3 = bwt_encode(compressed,bytearray(b'\xFF')) # 255 is always the bwt eof.
             compressed3 = bytearray(compressed3)
 
+
+            # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+            checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
+            debugw("checkpoint_compress_after_bwt")
+            debugw(checkpoint)
+
+
             debugw("wheeler:")
             debugw(len(compressed3))
 
-            repeats = find_repeating_chars(compressed3,5)
+            repeats = find_repeating_chars(compressed3,4)
 
             debugw("number of repeats:")
             debugw(len(repeats))
@@ -2052,10 +2107,18 @@ if (compress):
             # however there is the case where the number of repeats is equal to the separator.
             # in that case, two contiguous identical bytes to the separators will appear.
             # the second separator should not be treated as such in the scan.
-            compressed3 = replace_repeating_chars(compressed3,5,absent_chars[1])
+            
+            # debug disable RLE
+            compressed3 = replace_repeating_chars(compressed3,4,absent_chars[1])
+
+            # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+            checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
+            debugw("checkpoint_compress_after_rle")
+            debugw(checkpoint)
 
 
         else:
+            compressed3 = compressed
             debugw("not a single absent char, not performing wheeler and rle")
 
         '''
@@ -2243,7 +2306,7 @@ else:
 
     if(len(infile)):
         with open(infile, 'rb') as fh:
-            compressed = bytearray(fh.read())
+            compressed0 = bytearray(fh.read())
 
     #First we need to retrieve the preamble/header (separators)
     #and apply operations in reverse :
@@ -2251,7 +2314,18 @@ else:
     # 2- RLE decode
     # 3- BWT
 
-    compressed = Decode_Huffmann_RLE_BWT(compressed)
+
+    # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
+    checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed0])
+    debugw("checkpoint_decompress_after_second pass")
+    debugw(checkpoint)
+
+    compressed = Decode_Huffmann_RLE_BWT(compressed0)
+
+    # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
+    checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed])
+    debugw("checkpoint_decompress_after_rle_bwt_huffmann")
+    debugw(checkpoint)
 
     idx = 0
     #FirstCharOfLine = 1
@@ -2340,7 +2414,7 @@ else:
     
                 # populate bitarray from the two bytes
                 c = bitarray(endian='little')
-                c.frombytes(compressed[idx:idx+2])
+                c.frombytes(bytes(compressed[idx:idx+2]))
                 debugw(c)
     
                 # remove first byte msb (shift down the bits above)
@@ -2381,7 +2455,7 @@ else:
                 # populate bitarray from the three bytes
                 c = bitarray(endian='little')
                 #c.frombytes(compressed[idx:idx+3])
-                c.frombytes(chunk)
+                c.frombytes(bytes(chunk))
                 
                 debugw(c)
 
@@ -2481,7 +2555,7 @@ else:
                 # populate bitarray from the three bytes
                 c = bitarray(endian='little')
                 #c.frombytes(compressed[idx:idx+3])
-                c.frombytes(chunk)
+                c.frombytes(bytes(chunk))
                 
                 debugw(c)
 

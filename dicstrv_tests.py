@@ -174,6 +174,20 @@ import numpy as np
 from matplotlib import pyplot as plt
 from itertools import cycle,islice
 
+import codecs
+import nltk
+from nltk.tokenize import TweetTokenizer
+tknzr = TweetTokenizer()
+
+import re
+import bitstring
+from bitarray import bitarray
+import struct
+import time
+from dahuffman import HuffmanCodec
+#from burrowswheeler import transform, inverse
+
+
 #print(len(sys.argv))
 #op = (sys.argv[1]).encode("ascii").decode("ascii")
 #print(op)
@@ -238,18 +252,6 @@ if (len(sys.argv) == 4):
     infile = sys.argv[2]
     outfile = sys.argv[3]
 
-import codecs
-import nltk
-from nltk.tokenize import TweetTokenizer
-tknzr = TweetTokenizer()
-
-import re
-import bitstring
-from bitarray import bitarray
-import struct
-import time
-from dahuffman import HuffmanCodec
-from burrowswheeler import transform, inverse
 
 debug_on = True
 debug_ngrams_dic = False
@@ -645,6 +647,12 @@ def restore_unused_chars_shiftup(unused_char,compressed):
     compzip = zip(range(0,len(compressed)),compressed)
     for byte_and_pos in compzip:
         if (byte_and_pos[1] >= int.from_bytes(unused_char,'little')):            
+            debugw("byte_and_pos[0]")
+            debugw(byte_and_pos[0])
+            
+            debugw("byte_and_pos[1]")
+            debugw(byte_and_pos[1])
+            
             compressed[byte_and_pos[0]] += 1            
     #return compressed
     
@@ -1856,7 +1864,7 @@ def Decode_Huffmann_RLE_BWT(compressed):
     debugw(checkpoint)
 
     #shift characters above highest separator value up
-    restore_unused_chars_shiftup(bwt_shiftpos,compressed_new)
+    restore_unused_chars_shiftup(bwt_shiftpos,compressed_new2)
 
     # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
     checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed_new2])

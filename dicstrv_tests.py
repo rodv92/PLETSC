@@ -641,22 +641,69 @@ def restore_unused_chars_shiftup(unused_char,compressed):
     #handle special case where unused_char is 255 == BWT EOF
     if(int.from_bytes(unused_char,'little') == 255):
         debugw("unused char to shift into is 255 == bwt eof. exiting")
-        return
-
-
-    compzip = zip(range(0,len(compressed)),compressed)
-    for byte_and_pos in compzip:
-        if (byte_and_pos[1] >= int.from_bytes(unused_char,'little')):            
-            debugw("byte_and_pos[0]")
-            debugw(byte_and_pos[0])
-            
-            debugw("byte_and_pos[1]")
-            debugw(byte_and_pos[1])
-            
-            compressed[byte_and_pos[0]] += 1            
-    #return compressed
+        return compressed
     
-    # compress bytearray modified in place, no need to return it
+    elif(unused_char == bytearray(b'\x00\x00')):
+        debugw("unused_char: \x00\x00")
+        compressed_new = bytearray()
+        
+        jump = 0
+        for byte_idx in range(0,len(compressed)):
+            byte_idx += jump
+            if(byte_idx >= len(compressed)):
+                break
+
+            if((compressed[byte_idx] == 0) and (compressed[byte_idx +1] == 0)):
+                compressed_new.append(0)
+                jump += 1           
+            else:
+                compressed_new.append(compressed[byte_idx] + 1)
+        return compressed_new    
+    
+    elif(unused_char == bytearray(b'\x01\x01')):
+        debugw("unused_char: \x01\x01")
+        compressed_new = bytearray()
+        
+        jump = 0
+        for byte_idx in range(0,len(compressed)):
+            
+            byte_idx += jump
+
+            if(byte_idx>=len(compressed)):
+                break
+            elif(byte_idx<len(compressed) -1):
+                    
+                if((compressed[byte_idx] == 0) and (compressed[byte_idx +1] == 0)):
+                    compressed_new.append(0)
+                    jump += 1    
+                elif((compressed[byte_idx] == 1) and (compressed[byte_idx +1] == 1)):
+                    compressed_new.append(1)
+                    jump += 1    
+                else:
+                    compressed_new.append(compressed[byte_idx] + 2)
+            
+            elif(byte_idx == len(compressed) -1):
+
+                debugw("restore chars last index")
+                compressed_new.append(compressed[byte_idx] + 2)
+
+
+        return compressed_new
+  
+    else:
+        compzip = zip(range(0,len(compressed)),compressed)
+        for byte_and_pos in compzip:
+            if (byte_and_pos[1] >= int.from_bytes(unused_char,'little')):            
+                debugw("byte_and_pos[0]")
+                debugw(byte_and_pos[0])
+                
+                debugw("byte_and_pos[1]")
+                debugw(byte_and_pos[1])
+                
+                compressed[byte_and_pos[0]] += 1            
+        return compressed
+        
+        # compress bytearray modified in place, no need to return it
 
 def suffixArray(s):
     #''' creation du suffixe array avec leurs rangs ordonnés ''' 
@@ -737,23 +784,101 @@ def reuse_unused_chars_shiftdown(compressed):
             debugw(charval)
         if (len(abs_chars) >= 2):
             if(abs_chars[0] == 255 and abs_chars[1] == 254):
-                return abs_chars
+                debugw("reversing")
+                abs_chars.reverse()
+                return (abs_chars,compressed)
             else:
                 break
 
 
     if(len(abs_chars) == 2):
 
-        highest_abs_char = abs_chars[0]
-        
+        #highest_abs_char = abs_chars[0]
+        lowest_abs_char = abs_chars[1]
+
+        # special case where bwt eof is absent and next absent char is not 254.
+        # then we shift at the second absent char.
+        #if((highest_abs_char) == 255):
+        #    highest_abs_char = abs_chars[1]
+
+
         compzip = zip(range(0,len(compressed)),compressed)
         for byte_and_pos in compzip:
-            if (byte_and_pos[1] > highest_abs_char):
+            #if (byte_and_pos[1] > highest_abs_char):
+            if (byte_and_pos[1] > lowest_abs_char):
                 compressed[byte_and_pos[0]] -= 1
 
-        return abs_chars
-    else:
-        return [-1]
+        abs_chars[0] -= 1 # this will be the RLE, bwt will be the 255 freed.
+        return (abs_chars,compressed)
+    
+    elif(len(abs_chars) == 1):    
+        tmpchar = abs_chars[0]
+        # example tmpchar is free. 
+        # we need to free 255.
+        # we swap all 255 with 210.
+        # record 210.
+        # let's free 254.
+        # escape 254 with \254\254.
+        #254 will be RLE.
+        abs_chars[0] = bytearray(b'\xFD\xFD')
+
+        debugw("will swap 255 into the lone absent char")
+        debugw("will escape 253 and swap 254 into it. 254 is the rle char now it's freed")
+
+
+        compressed_new = bytearray()
+        compzip = zip(range(0,len(compressed)),compressed)
+        for byte_and_pos in compzip:
+            #if (byte_and_pos[1] > highest_abs_char):
+            if (byte_and_pos[1] == 253):
+                debugw("escaping: 253")
+                compressed_new.extend(abs_chars[0])
+            elif (byte_and_pos[1] == 254):
+                compressed_new.append(253)
+            elif (byte_and_pos[1] == 255):
+                debugw("swapping: 255 into: " + tmpchar)
+                compressed_new.append(tmpchar)
+        abs_chars.append(tmpchar) # tmpchar is the char in which bwt eof (255) has been swapped into.
+        # format : abs_char[0] = \xFD\xFD. escape sequence to make room for RLE char
+        # format : abs_char[1] = tmpchar (original absent char). the char in which bwt eof (255) has been swapped into. 
+        
+
+        return (abs_chars,compressed_new)
+
+    elif(len(abs_chars) == 0):
+        abs_chars.append(bytearray(b'\xFC\xFC'))
+        abs_chars.append(bytearray(b'\xFD\xFD'))
+        debugw("will escape 252")
+        debugw("will shift 255, into 252") # 255 is bwt eof, now free
+        debugw("will escape 253")
+        debugw("will shift 254 into 253") # 254 is rle char, now free
+        
+        
+
+        compressed_new = bytearray()
+        compzip = zip(range(0,len(compressed)),compressed)
+        for byte_and_pos in compzip:
+            #if (byte_and_pos[1] > highest_abs_char):
+            if (byte_and_pos[1] == 252):
+                debugw("escaping \xFC")
+                compressed_new.extend(abs_chars[0])
+            elif (byte_and_pos[1] == 253):
+                debugw("escaping \xFD")
+                compressed_new.extend(abs_chars[1])
+            elif (byte_and_pos[1] == 255):
+                debugw("swap 255 to 252")
+                compressed_new.append(b'\xFC')
+            elif (byte_and_pos[1] == 254):
+                debugw("swap 254 to 253")
+                compressed_new.append(b'\xFD')
+                      
+        return (abs_chars,compressed_new)
+        # format : abs_char[0] = \xFC\xFC. escape sequence to make room for bwt char
+        # format : abs_char[1] = \xFD\xFD. escape sequence to make room for rle char
+        
+    
+    #else:
+    #    return [-1]
     # compressed modified in place, no need to return. return -1 if there are less than two absent chars.
 
 """
@@ -859,6 +984,7 @@ def replace_repeating_chars(byte_array, n, separator):
                 #current_char == separator : impossible since separator is verified not to be in the charset
                 #number of repetitions == separator, possible, but we jump over.
 
+                debugw("will replace repetitions n=" + str(count))
                 encoded_value = bytearray(current_char.to_bytes(1,'little'))
                 encoded_value.extend(separator.to_bytes(1,'little'))
                 if (count < 255):
@@ -1783,21 +1909,36 @@ def Decode_Huffmann_RLE_BWT(compressed):
     debugw(checkpoint)
 
     #Interpret Header
-    debugw("compressed[0]")
-    debugw(compressed[0])
+    debugw("compressed[0:4]")
+    debugw(compressed[0:4])
 
     next_header_idx = 0
     if (compressed[0] == 255):
-        debugw("compressed stream uses BWT and RLE")
+        debugw("compressed stream uses BWT and RLE - two absent chars")
         rle_sep = bytearray((compressed[1]).to_bytes(1,"little")) # xFF forbidden as RLE sep.
         bwt_shiftpos = bytearray((compressed[2]).to_bytes(1,"little"))
         next_header_idx += 3
+    elif (compressed[0] == 254):
+        debugw("compressed stream uses BWT and RLE - single absent char")
+        rle_sep = bytearray((compressed[1]).to_bytes(1,"little")) # xFF forbidden as RLE sep.
+        bwt_shiftpos = bytearray(b'\x00\x00')
+        next_header_idx += 2
+    elif (compressed[0] == 253):
+        debugw("compressed stream uses BWT and RLE - zero absent chars")
+        rle_sep = bytearray(b'\xFE') # xFF forbidden as RLE sep.
+        bwt_shiftpos = bytearray(b'\x01\x01')
+        next_header_idx += 1
+    
     else:
         debugw("compressed stream does not use BWT and RLE")
         return compressed[1:]
 
     debugw("rle_sep")
     debugw(rle_sep)
+    
+    debugw("len(rle_sep)")
+    debugw(len(rle_sep))
+    
     debugw("bwt_shiftpos")
     debugw(bwt_shiftpos)
     
@@ -1828,19 +1969,26 @@ def Decode_Huffmann_RLE_BWT(compressed):
             print("separator found")
             rep_char = compressed[idx-1]
             print("rep_char")
+            print(rep_char)
             
             if (int.from_bytes(compressed[idx+len(rle_sep):idx+len(rle_sep)+2],'little') == 65535):
                 #repetitions encoded on three bytes
+                debugw("repetitions encoded on three bytes")
                 rep_num = int.from_bytes(compressed[idx+len(rle_sep)+2:idx+len(rle_sep)+5], 'little')
                 jump += 5
             elif (int.from_bytes(compressed[idx+len(rle_sep):idx+len(rle_sep)+1],'little') == 255):
                 #repetitions encoded on two bytes
+                debugw("repetitions encoded on two bytes")
                 rep_num = int.from_bytes(compressed[idx+len(rle_sep)+1:idx+len(rle_sep)+3], 'little')
                 jump += 3
             else:
                 #repetitions encoded on one byte
+                debugw("repetitions encoded on one byte")
                 rep_num = int.from_bytes(compressed[idx+len(rle_sep):idx+len(rle_sep)+1], 'little')
                 jump += 1
+
+            print("rep_num")
+            print(rep_char)
 
             replace_with_bytes = bytearray(rep_char.to_bytes(1,'little')) * (rep_num - 1) # rep_num - 1 ...
             #because the previous match idx was on the repeated char (in the following else statement)
@@ -1864,7 +2012,7 @@ def Decode_Huffmann_RLE_BWT(compressed):
     debugw(checkpoint)
 
     #shift characters above highest separator value up
-    restore_unused_chars_shiftup(bwt_shiftpos,compressed_new2)
+    compressed_new2 = restore_unused_chars_shiftup(bwt_shiftpos,compressed_new2)
 
     # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
     checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed_new2])
@@ -2077,8 +2225,10 @@ if (compress):
 
 
 
-        absent_chars = reuse_unused_chars_shiftdown(compressed)
-        
+        (absent_chars,compressed) = reuse_unused_chars_shiftdown(compressed)
+        # absent_chars[0] # is the RLE char. it is free
+        # absent_chars[1] # is the previously free char used to shift higher bytes into.
+
 
         # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
         checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed])
@@ -2089,15 +2239,28 @@ if (compress):
         #absent_chars =  [-1]
 
         #orig_idx = 0
-        if(absent_chars != [-1]): # if there are less than 2 absent chars, we perform neighter bwt or rle
 
+        # absent_chars[0] and absent_chars[1] are both bytes. (general case with two available absent chars)
+        
+        # or absent_chars[0] is bytearray \x00\x00 and absent_chars[1] is  byte (only one originally available absent char)
+        # the additional absent char (255) has been constructed through an escape sequence \x00\x00 
+        # and by shifting each char in the whole ascii table down one position.
+
+
+        # or absent_chars[0] is bytearray \x00\x00 and absent_chars[1] is \x01\x01
+        # the two absent chars (255) and (254) have been constructed through two escape sequences \x00\x00 and \x01\x01 
+        # and by shifting each char in the whole ascii table down two positions. 
+
+
+        if (isinstance(absent_chars[0],int) and (isinstance(absent_chars[1],int))):
+            # first case
             compressed3 = bwt_encode(compressed,bytearray(b'\xFF')) # 255 is always the bwt eof.
             compressed3 = bytearray(compressed3)
 
 
             # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
             checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
-            debugw("checkpoint_compress_after_bwt")
+            debugw("checkpoint_compress_after_bwt_two_absent")
             debugw(checkpoint)
 
 
@@ -2117,15 +2280,97 @@ if (compress):
             # the second separator should not be treated as such in the scan.
             
             # debug disable RLE
-            compressed3 = replace_repeating_chars(compressed3,4,absent_chars[1])
+            #compressed3 = replace_repeating_chars(compressed3,4,absent_chars[1])
+            compressed3 = replace_repeating_chars(compressed3,4,absent_chars[0])
+            
 
             # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
             checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
-            debugw("checkpoint_compress_after_rle")
+            debugw("checkpoint_compress_after_rle_two_absent")
+            debugw(checkpoint)
+
+        elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],int))):
+            # a single absent char is present originally.
+            # second case
+            compressed3 = bwt_encode(compressed,bytearray(b'\xFF')) # 255 is always the bwt eof.
+            compressed3 = bytearray(compressed3)
+
+                        # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+            checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
+            debugw("checkpoint_compress_after_bwt_single_absent")
+            debugw(checkpoint)
+
+
+            debugw("wheeler:")
+            debugw(len(compressed3))
+
+            repeats = find_repeating_chars(compressed3,4)
+
+            debugw("number of repeats:")
+            debugw(len(repeats))
+
+            #compressed3 = replace_repeating_chars(compressed3,4,abs_chars[1])
+            # RLE format repeated char + separator + number of repeats
+            # repeated_char cannot be equal to separator, which is a non issue since it is an absent char.
+            # however there is the case where the number of repeats is equal to the separator.
+            # in that case, two contiguous identical bytes to the separators will appear.
+            # the second separator should not be treated as such in the scan.
+            
+            # format : abs_char[0] = \xFE\xFE. escape sequence for RLE.
+            # format : abs_char[1] = tmpchar (original absent char). the char in which bwt eof (255) has been swapped into. 
+        
+            # debug disable RLE
+            #compressed3 = replace_repeating_chars(compressed3,4,absent_chars[1])
+            compressed3 = replace_repeating_chars(compressed3,4,254) # in that particular case
+            # xFE is always rle char
+            
+
+            # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+            checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
+            debugw("checkpoint_compress_after_rle_single_absent")
+            debugw(checkpoint)
+
+        elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],bytearray))):
+            # no absent chars are presents originally
+            # third case
+            compressed3 = bwt_encode(compressed,bytearray(b'\xFF')) # 255 is always the bwt eof.
+            compressed3 = bytearray(compressed3)
+
+                        # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+            checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
+            debugw("checkpoint_compress_after_bwt_no_absent")
+            debugw(checkpoint)
+
+
+            debugw("wheeler:")
+            debugw(len(compressed3))
+
+            repeats = find_repeating_chars(compressed3,4)
+
+            debugw("number of repeats:")
+            debugw(len(repeats))
+
+            #compressed3 = replace_repeating_chars(compressed3,4,abs_chars[1])
+            # RLE format repeated char + separator + number of repeats
+            # repeated_char cannot be equal to separator, which is a non issue since it is an absent char.
+            # however there is the case where the number of repeats is equal to the separator.
+            # in that case, two contiguous identical bytes to the separators will appear.
+            # the second separator should not be treated as such in the scan.
+            
+            # debug disable RLE
+            #compressed3 = replace_repeating_chars(compressed3,4,absent_chars[1])
+            compressed3 = replace_repeating_chars(compressed3,4,254) # in that particular case
+            # absent char serving as RLE separator is 254.
+            
+
+            # checkpoint : printing before attempting BWT,RLE,Huffmann for debugging purposes
+            checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed3])
+            debugw("checkpoint_compress_after_rle_no_absent")
             debugw(checkpoint)
 
 
         else:
+            #should never enter here
             compressed3 = compressed
             debugw("not a single absent char, not performing wheeler and rle")
 
@@ -2145,11 +2390,40 @@ if (compress):
 
         #compressed3[:0] = abs_seq[0] # prepend BWT eof
         #compressed3[:0] = abs_seq[1] # prepend RLE separator       
+        if (isinstance(absent_chars[0],int) and (isinstance(absent_chars[1],int))):
         
-        if(absent_chars != [-1]):
-            compressed3[:0] = [absent_chars[0]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
-            compressed3[:0] = [absent_chars[1]] # prepend RLE separator       
+            #compressed3[:0] = [absent_chars[0]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            #compressed3[:0] = [absent_chars[1]] # prepend RLE separator       
+            
+            compressed3[:0] = [absent_chars[1]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            compressed3[:0] = [absent_chars[0]] # prepend RLE separator       
+            
             compressed3[:0] = bytearray(b'\xFF') # prepend BWT eof to signal use of bwt+rle TODO: use bit flags        
+        
+        
+        elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],int))):
+            #compressed3[:0] = [absent_chars[0]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            #compressed3[:0] = [absent_chars[1]] # prepend RLE separator       
+            
+            #compressed3[:0] = [(absent_chars[0])[0]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            #compressed3[:0] = [(absent_chars[0])[1]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            
+            compressed3[:0] = [absent_chars[1]] # prepend char in which BWT has been swapped into.       
+            
+            compressed3[:0] = bytearray(b'\xFE') # prepend char to signify single absent char        
+        
+        elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],bytearray))):
+            #compressed3[:0] = [absent_chars[0]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            #compressed3[:0] = [absent_chars[1]] # prepend RLE separator       
+            
+            #compressed3[:0] = [(absent_chars[0])[0]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            #compressed3[:0] = [(absent_chars[0])[1]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
+            
+            #compressed3[:0] = [(absent_chars[1])[0]] # prepend \x01      
+            #compressed3[:0] = [(absent_chars[1])[1]] # prepend \x01       
+            
+            compressed3[:0] = bytearray(b'\xFD') # prepend char to signify no absent char   TODO: use bit flags        
+        
         else:
             compressed3[:0] = bytearray(b'\x00') # 0 to signal neither bwt or rle was performed.
         

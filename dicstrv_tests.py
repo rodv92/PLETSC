@@ -631,117 +631,24 @@ debugw(codec_all.get_code_table())
 #quit()
 #
 
-def restore_unused_chars_shiftup(unused_char,num_abs_char,compressed):
+def restore_unused_chars_shiftup(unused_seqs,compressed):
     # works in-place
     #we need to restore original sequence after bwt_decode, knowing the highest unused char number.
     #in our case, simple byte sorting by value, not lexicographic as we are working on the full ASCII range
-    debugw("unused_char_to_shift_down_into:")
-    debugw(unused_char)
+    debugw("unused_seqs_to_shift_up_into:")
+    debugw(unused_seqs)
 
-    #handle special case where unused_char is 255 == BWT EOF
-    if(unused_char == 255):
-        debugw("unused char to shift into is 255 == bwt eof. exiting")
-        return compressed
+    if (isinstance(unused_seqs[0],int) and (isinstance(unused_seqs[1],int))):
     
-    elif(num_abs_char == 1):
-        debugw("single absent char")
-        compressed_new = bytearray()
+        #handle special case where unused_char is 255 == BWT EOF
+        if(unused_seqs[0] == 255):
+            debugw("unused char to shift into is 255 == bwt eof. exiting")
+            return compressed
         
-        jump = 0
-        for byte_idx in range(0,len(compressed)):
-            byte_idx += jump
-            if(byte_idx >= len(compressed)):
-                break
-
-            
-            if(compressed[byte_idx] == 253):
-                nb_run = 1
-                byte_idx += 1
-                while(compressed[byte_idx] == 253):
-                    nb_run += 1
-
-                if(not(nb_run % 2)): # even number of runs, only escape sequences. divide by two
-                    compressed_new.extend(b'\xFD' * nb_run/2)
-                else: # odd number of runs, shift back 253 to 254
-                    compressed_new.extend(b'\xFE' * int(nb_run/2) + 1)
-                jump += nb_run - 1
-
-            elif(compressed[byte_idx] == unused_char):
-                compressed_new.append(255)
-                # swap back unused char into bwt eof.
-            else:
-                # all other chars.
-                compressed_new.append(compressed[byte_idx])
-
-        return compressed_new    
-    
-    elif(num_abs_char == 0):
-        
-        debugw("zero absent char")
-        debugw("will unescape 252")
-        debugw("will shift 252, into 255") # 255 is bwt eof, now free
-        debugw("will unescape 253")
-        debugw("will shift 253 into 254") # 254 is rle char, now free
-       
-        compressed_new = bytearray()
-        
-        jump = 0
-        for byte_idx in range(0,len(compressed)):
-            
-            byte_idx += jump
-
-            if(byte_idx>=len(compressed)):
-                break
-            elif(byte_idx<len(compressed) -1):
-
-
-                252 252 255
-                252 252 252 252 252
-
-                if(compressed[byte_idx] == 252):
-                    nb_run = 1
-                    byte_idx += 1
-                    while(compressed[byte_idx] == 252):
-                        nb_run += 1                
-                        if(not(nb_run % 2)): # even number of 252 runs : only escape sequences. divide by two
-                            compressed_new.extend(b'\xFC' * nb_run/2)
-                        else: # odd number of runs, shift back 253 to 254
-                            compressed_new.extend(b'\xFE' * int(nb_run/2) + 1)
-                        jump += nb_run - 1
-
-
-
-
-                if((compressed[byte_idx] == 252) and (compressed[byte_idx +1] == 252)):
-                    compressed_new.append(252)
-                    jump += 1    
-                elif((compressed[byte_idx] == 253) and (compressed[byte_idx +1] == 253)):
-                    compressed_new.append(253)
-                    jump += 1    
-                elif(compressed[byte_idx] == 252):
-                    compressed_new.append(255)
-                elif(compressed[byte_idx] == 253):
-                    compressed_new.append(254)
-                else:
-                    compressed_new.append(compressed[byte_idx])
-            
-            elif(byte_idx == len(compressed) -1):
-
-                debugw("restore chars last index")
-                if(compressed[byte_idx] == 252):
-                    compressed_new.append(255)
-                elif(compressed[byte_idx] == 253):
-                    compressed_new.append(254)
-                else:
-                    compressed_new.append(compressed[byte_idx])
-
-        return compressed_new
-  
-    elif(num_abs_char == 2):
         debugw("two absent chars")
         compzip = zip(range(0,len(compressed)),compressed)
         for byte_and_pos in compzip:
-            if (byte_and_pos[1] >= int.from_bytes(unused_char,'little')):            
+            if (byte_and_pos[1] >= unused_seqs[0]):            
                 debugw("byte_and_pos[0]")
                 debugw(byte_and_pos[0])
                 
@@ -752,7 +659,76 @@ def restore_unused_chars_shiftup(unused_char,num_abs_char,compressed):
         return compressed
         
         # compress bytearray modified in place, no need to return it
+    
+    elif (isinstance(unused_seqs[0],bytearray) and (isinstance(unused_seqs[1],int))):
+    
+        debugw("single absent char")
+        compressed_new = bytearray()
+        
+        jump = 0
+        for byte_idx in range(0,len(compressed)):
+            
+            byte_idx += jump
+            
+            if(byte_idx>=len(compressed)):
+                break
+            
+            if(byte_idx < len(compressed) - 1):
+                if(compressed[byte_idx:byte_idx+2] == unused_seqs[0]):
+                    debugw("swap absent seq 0 back to 255")
+                    jump += 1
+                    compressed_new.append(255)
+                    # swap back bwt eof.
+            if(compressed[byte_idx] == unused_seqs[1]):
+                debugw("swap absent char back to 254")
+                compressed_new.append(254)
+                # swap back unused char into rle sep
+            else:
+                # all other chars.
+                debugw("other char, no change")
+                compressed_new.append(compressed[byte_idx])
+                    
 
+        return compressed_new    
+    
+    elif (isinstance(unused_seqs[0],bytearray) and (isinstance(unused_seqs[1],bytearray))):
+
+        debugw("zero absent char")
+        compressed_new = bytearray()
+        
+        jump = 0
+        for byte_idx in range(0,len(compressed)):
+            
+            byte_idx += jump
+
+            if(byte_idx>=len(compressed)):
+                break
+            
+            if(byte_idx < len(compressed) - 1):
+                if(compressed[byte_idx:byte_idx+2] == unused_seqs[0]):
+                    debugw("swap absent seq 0 back to 255")
+                    jump += 1
+                    compressed_new.append(255)
+                    # swap back bwt eof.
+                elif(compressed[byte_idx:byte_idx+2] == unused_seqs[1]):
+                    debugw("swap absent seq 1 back to 254")
+                    jump += 1
+                    compressed_new.append(254)
+                    # swap back bwt eof.
+                else:
+                    # all other chars.
+                    debugw("other char, no change")
+                    compressed_new.append(compressed[byte_idx])
+            
+            else:
+                # all other chars.
+                debugw("other char, no change")
+                compressed_new.append(compressed[byte_idx])
+                   
+        return compressed_new
+  
+    
+    
 def suffixArray(s):
     #''' creation du suffixe array avec leurs rangs ordonnés ''' 
     satups = sorted([(s[i:], i) for i in range(0, len(s)+1)])
@@ -888,17 +864,19 @@ def reuse_unused_chars_shiftdown(compressed):
                 debugw("other character, no change")
                 compressed_new.append(byte_and_pos[1])
 
-        # format : abs_char[0] = absent sequence of two different chars that do not contain 255,254 or absent_char to make room for RLE char 254
-        # format : abs_char[1] = tmpchar (original absent char). the char in which bwt eof (255) has been swapped into. 
+        # format : abs_char[0] = absent sequence of two different chars that do not contain 255,254 or absent_char to make room bwt eof 255
+        # format : abs_char[1] = tmpchar (original absent char). the char in which rle sep (254) has been swapped into. 
         
 
         return (abs_chars,compressed_new)
 
     elif(len(abs_chars) == 0):
         
-        abs_seqs  = find_absent_sequences(compressed,2,-1,True)
-        abs_chars[0] = bytearray((abs_seqs[0]).to_bytes(2,'little'))
-        abs_chars[1] = bytearray((abs_seqs[1]).to_bytes(2,'little'))
+        abs_seqs = find_absent_sequences(compressed,2,-1,True)
+        #abs_chars[0] = bytearray((abs_seqs[0]).to_bytes(2,'little'))
+        #abs_chars[1] = bytearray((abs_seqs[1]).to_bytes(2,'little'))
+        abs_chars.append(abs_seqs[0])
+        abs_chars.append(abs_seqs[1])
         
 
         compressed_new = bytearray()
@@ -917,12 +895,12 @@ def reuse_unused_chars_shiftdown(compressed):
                 compressed_new.extend(abs_chars[1])
             else:
                 debugw("other character, no change")
-                compressed_new.append(byte_and_pos[1])
+                compressed_new.append(compressed[byte_idx])
                 
                       
         return (abs_chars,compressed_new)
-        # format : abs_char[0] = \xFC\xFC. escape sequence to make room for bwt char
-        # format : abs_char[1] = \xFD\xFD. escape sequence to make room for rle char
+        # format : abs_char[0] = first found escape sequence to make room for bwt char
+        # format : abs_char[1] = second escape sequence to make room for rle char
         
     
     #else:
@@ -1091,6 +1069,7 @@ def find_absent_sequences(byte_array,n,forbidden_char=-1,no_overlap=False):
                     break
     else:
         debugw("overlap not allowed")
+        prevseq = []
         for seq in all_possible_sequences:
             if seq == None:
                 debugw("skipping None sequence")
@@ -1985,10 +1964,10 @@ def Decode_Huffmann_RLE_BWT(compressed):
     debugw(checkpoint)
 
 
-    num_abs_char = 0;
     #Interpret Header
     debugw("compressed[0:4]")
     debugw(compressed[0:4])
+    unused_seqs = []
 
     next_header_idx = 0
     if (compressed[0] == 255):
@@ -1996,19 +1975,20 @@ def Decode_Huffmann_RLE_BWT(compressed):
         rle_sep = bytearray((compressed[1]).to_bytes(1,"little")) # xFF forbidden as RLE sep.
         bwt_shiftpos = bytearray((compressed[2]).to_bytes(1,"little"))
         next_header_idx += 3
-        num_abs_char = 2
     elif (compressed[0] == 254):
         debugw("compressed stream uses BWT and RLE - single absent char")
         rle_sep = 254 # xFF forbidden as RLE sep.
-        bwt_shiftpos = bytearray((compressed[1]).to_bytes(1,"little"))
-        next_header_idx += 2
-        num_abs_char = 1
+        bwt_shiftpos = 255
+        unused_seqs.append(bytearray(compressed[1:3]))
+        unused_seqs.append(compressed[3])
+        next_header_idx += 4
     elif (compressed[0] == 253):
         debugw("compressed stream uses BWT and RLE - zero absent chars")
         rle_sep = 254 # xFF forbidden as RLE sep.
-        bwt_shiftpos = 253
-        next_header_idx += 1
-        num_abs_char = 0
+        bwt_shiftpos = 255
+        unused_seqs.append(bytearray(compressed[1:3]))
+        unused_seqs.append(bytearray(compressed[3:5]))
+        next_header_idx += 5
 
     else:
         debugw("compressed stream does not use BWT and RLE")
@@ -2016,8 +1996,7 @@ def Decode_Huffmann_RLE_BWT(compressed):
 
     debugw("rle_sep")
     debugw(rle_sep)
-    
-    
+        
     debugw("bwt_shiftpos")
     debugw(bwt_shiftpos)
     
@@ -2091,7 +2070,10 @@ def Decode_Huffmann_RLE_BWT(compressed):
     debugw(checkpoint)
 
     #shift characters above highest separator value up
-    compressed_new2 = restore_unused_chars_shiftup(bwt_shiftpos,num_abs_char,compressed_new2)
+    if(len(unused_seqs)):
+        compressed_new2 = restore_unused_chars_shiftup(unused_seqs,compressed_new2)
+    else:
+        debugw("no restore unused chars, two absent characters")
 
     # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
     checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed_new2])
@@ -2463,27 +2445,28 @@ if (compress):
         
         elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],int))):
             
-            # format : abs_char[0] = \xFD\xFD. escape sequence to make room for RLE char
-            # format : abs_char[1] = tmpchar (original absent char). the char in which bwt eof (255) has been swapped into. 
-            compressed3[:0] = [absent_chars[1]] # prepend char in which BWT has been swapped into.       
-            
+            # format : abs_char[0] = absent sequence of two different chars that do not contain 255,254 or absent_char to make room bwt eof 255
+            # format : abs_char[1] = tmpchar (original absent char). the char in which rle sep (254) has been swapped into. 
+            compressed3[:0] = absent_chars[1] # prepend char in which rle sep has been swapped into.       
+            compressed3[:0] = absent_chars[0] # prepend absent sequence used to make room for bwt eof.      
             compressed3[:0] = bytearray(b'\xFE') # prepend char to signify single absent char        
         
         elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],bytearray))):
             
-            # format : abs_char[0] = \xFC\xFC. escape sequence to make room for bwt char
-            # format : abs_char[1] = \xFD\xFD. escape sequence to make room for rle char
-
+            # format : abs_char[0] = first found escape sequence to make room for rle sep
+            # format : abs_char[1] = second escape sequence to make room for bwt eof
+            compressed3[:0] = absent_chars[1] # prepend absent sequence used to make room for rle sep.       
+            compressed3[:0] = absent_chars[0] # prepend absent sequence used to make room for bwt eof.              
             compressed3[:0] = bytearray(b'\xFD') # prepend char to signify no absent char   TODO: use bit flags        
         
         else:
             compressed3[:0] = bytearray(b'\x00') # 0 to signal neither bwt or rle was performed.
         
         debugw("absent_chars:")
-        debugw(absent_chars[0:2])
+        debugw(absent_chars)
         debugw("header:")
-        debugw(compressed3[0:10])
-        debugw("rle:")
+        debugw(compressed3[0:5])
+        debugw("compressed length after rle:")
         debugw(len(compressed3))
 
         codec_final_pass = HuffmanCodec.load("huffmann_final_pass.bin") #based on compressed interface.txt (interface.bin)

@@ -9,8 +9,8 @@
 #GPL 3 License
 # www.skynext.tech
 # Rodrigo Verissimo
-# v0.92
-# October 21th, 2023
+# v0.93
+# November 20th, 2023
 
 
 # Python + packages Requirements
@@ -168,10 +168,11 @@ cat outngrams.bin | awk '{ print length, bash $0 }' | sort -n -s | cut -d" " -f2
 
 
 import sys
+import os
+import pickle
 import traceback
 from collections import Counter, OrderedDict
 import numpy as np
-from matplotlib import pyplot as plt
 from itertools import cycle,islice
 
 import codecs
@@ -185,7 +186,6 @@ from bitarray import bitarray
 import struct
 import time
 from dahuffman import HuffmanCodec
-#from burrowswheeler import transform, inverse
 
 
 #print(len(sys.argv))
@@ -655,7 +655,8 @@ def restore_unused_chars_shiftup(unused_seqs,compressed):
                 debugw("byte_and_pos[1]")
                 debugw(byte_and_pos[1])
                 
-                compressed[byte_and_pos[0]] += 1            
+                compressed[byte_and_pos[0]] += 1
+
         return compressed
         
         # compress bytearray modified in place, no need to return it
@@ -1974,6 +1975,8 @@ def Decode_Huffmann_RLE_BWT(compressed):
         debugw("compressed stream uses BWT and RLE - two absent chars")
         rle_sep = bytearray((compressed[1]).to_bytes(1,"little")) # xFF forbidden as RLE sep.
         bwt_shiftpos = bytearray((compressed[2]).to_bytes(1,"little"))
+        unused_seqs.append(compressed[1])
+        unused_seqs.append(compressed[2])
         next_header_idx += 3
     elif (compressed[0] == 254):
         debugw("compressed stream uses BWT and RLE - single absent char")
@@ -2014,7 +2017,7 @@ def Decode_Huffmann_RLE_BWT(compressed):
         debugw(int.from_bytes(compressed[idx:idx+1],'little'))
 
         # special cases backward checks
-        rle_sep_found = (int.from_bytes(compressed[idx:idx+1],'little') == 254)
+        rle_sep_found = (int.from_bytes(compressed[idx:idx+1],'little') == int.from_bytes(rle_sep,'little'))
         #char_before_is_rle_sep = (int.from_bytes(compressed[idx-1:idx+1-1],'little') == int.from_bytes(rle_sep,'little'))
         #char_idx_1_is_255 = (int.from_bytes(compressed[idx-1:idx+1-1],'little') == 255)
         #char_idx_2_is_255 = (int.from_bytes(compressed[idx-2:idx+1-2],'little') == 255)
@@ -2046,7 +2049,7 @@ def Decode_Huffmann_RLE_BWT(compressed):
                 jump += 1
 
             print("rep_num")
-            print(rep_char)
+            print(rep_num)
 
             replace_with_bytes = bytearray(rep_char.to_bytes(1,'little')) * (rep_num - 1) # rep_num - 1 ...
             #because the previous match idx was on the repeated char (in the following else statement)
@@ -2070,11 +2073,8 @@ def Decode_Huffmann_RLE_BWT(compressed):
     debugw(checkpoint)
 
     #shift characters above highest separator value up
-    if(len(unused_seqs)):
-        compressed_new2 = restore_unused_chars_shiftup(unused_seqs,compressed_new2)
-    else:
-        debugw("no restore unused chars, two absent characters")
-
+    compressed_new2 = restore_unused_chars_shiftup(unused_seqs,compressed_new2)
+    
     # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
     checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed_new2])
     debugw("checkpoint_decompress_after_shiftup")
@@ -2092,50 +2092,85 @@ nltk.download('punkt')
 #contractions also have been added in their form with a quote just after (next line) the form 
 # without quote. ex : next line after "dont" appears "don't"
 
-file1 = open('count_1w.txt', 'r')
-Lines = file1.readlines()
-
 #initializing Python dicts
 count = 1
 engdict = {}
 engdictrev = {}
 
 
-# special case : byte val 0 is equal to new line.
-# TODO : make sure that windows CRLF is taken care of.
-engdict[0] = "\n"
-engdictrev["\n"] = 0
+if (not os.path.isfile('count_1w.pickle')):
 
-# populating dicts
-for line in Lines:
-    # Strips the newline character
-    engdict[count] = line.strip()
-    engdictrev[line.strip()] = count
-    count += 1
 
-### populating ngram dict
+    debugw("first load of dic")
+    file1 = open('count_1w.txt', 'r')
+    Lines = file1.readlines()
 
-filengrams = open('outngrams.bin', 'rt')
-ngramlines = filengrams.readlines()
+    # special case : byte val 0 is equal to new line.
+    # TODO : make sure that windows CRLF is taken care of.
+    engdict[0] = "\n"
+    engdictrev["\n"] = 0
+
+    # populating dicts
+    for line in Lines:
+        # Strips the newline character
+        engdict[count] = line.strip()
+        engdictrev[line.strip()] = count
+        count += 1
+
+    debugw("pickling dictionaries")
+    with open('count_1w.pickle', 'wb') as handle:
+        pickle.dump(engdict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(engdictrev, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+else:
+
+    debugw("loading pickled dictionaries")
+    with open('count_1w.pickle', 'rb') as handle:
+        engdict = pickle.load(handle)
+        engdictrev = pickle.load(handle)
+        
+
 
 ngram_dict = {}
 ngram_dict_rev = {}
 
+if (not os.path.isfile('ountgrams.pickle')):
 
-count = 0
-# populating dicts
-for ngramline in ngramlines:
-# Strips the newline character
-    #keystr = "".join([f"\\x{byte:02x}" for byte in ngramline.strip()])
-    #keystr = keystr.replace("\\","")
-    #if(count == 71374):
-    keystr = ngramline.strip()
-    #print(ngramline.strip())
-    #print(keystr)
-    #quit()
-    ngram_dict_rev[count] = keystr
-    ngram_dict[keystr] = count
-    count += 1
+    ### populating ngram dict
+
+    filengrams = open('outngrams.bin', 'rt')
+    ngramlines = filengrams.readlines()
+
+    count = 0
+    # populating dicts
+    for ngramline in ngramlines:
+    # Strips the newline character
+        #keystr = "".join([f"\\x{byte:02x}" for byte in ngramline.strip()])
+        #keystr = keystr.replace("\\","")
+        #if(count == 71374):
+        keystr = ngramline.strip()
+        #print(ngramline.strip())
+        #print(keystr)
+        #quit()
+        ngram_dict_rev[count] = keystr
+        ngram_dict[keystr] = count
+        count += 1
+
+    debugw("pickling ngram dictionaries")
+    with open('outngrams.pickle', 'wb') as handle:
+        pickle.dump(ngram_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(ngram_dict_rev, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+else:
+
+    debugw("loading pickled ngram dictionaries")
+    with open('outngrams.pickle', 'rb') as handle:
+        ngram_dict = pickle.load(handle)
+        ngram_dict_rev = pickle.load(handle)
+        
+
+
+
 
 idx = 0
 debugw("first ngram in dict:")

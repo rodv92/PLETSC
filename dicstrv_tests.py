@@ -201,6 +201,9 @@ if ((len(sys.argv) < 3) or (len(sys.argv) > 4)):
     print("python3 dicstrv.py -c <txt_inputfile>")
     print("Reads txt_input file and writes compressed output to stdout\n")
 
+    print("python3 dicstrv.py -bc folder_path ext")
+    print("Reads all files recursively in folder_path and generates for each file a compressed file with extension '.ext'")
+    
     #print("python3 dicstrv.py -bc <txt_inputfile> <txt_inpputfile2> <txt_inputfile2> ...")
     #print("Batch compress : reads txt_input files and writes compressed output to bin files, appending bin extension, filewise\n")
 
@@ -215,30 +218,32 @@ if ((len(sys.argv) < 3) or (len(sys.argv) > 4)):
     quit()
 
 if (sys.argv[1] == "-c"):
+    batch = False
     compress = True
     gendic = False
     huffmann_only = False
+if (sys.argv[1] == "-bc"):
+    compress = True
+    gendic = False
+    huffmann_only = False
+    batch = True
 elif (sys.argv[1] == "-d"):
+    batch = False
     compress = True
     gendic = True
     huffmann_only = False
 elif (sys.argv[1] == "-x"):
-    compress = False
-    gendic = False
-    huffmann_only = False
-elif (sys.argv[1] == "-bc"): # batch compress
-    compress = True
-    gendic = False
-    huffmann_only = False
-elif (sys.argv[1] == "-bx"): # batch decompress
+    batch = False
     compress = False
     gendic = False
     huffmann_only = False
 elif (sys.argv[1] == "-hc"): # only use huffmann compression - to compare performance.
+    batch = False
     compress = True
     gendic = False
     huffmann_only = True
 elif (sys.argv[1] == "-hx"): # only yse huffmann decompression - to compare performance.
+    batch = False
     compress = False
     gendic = False
     huffmann_only = True
@@ -286,7 +291,7 @@ codec_lower = HuffmanCodec.from_frequencies(
 }
 )
 
-codec_lower.print_code_table()
+#codec_lower.print_code_table()
 debugw(codec_lower.get_code_table())
 
 # following is ASCII mixed upper and lower case frequency from an English writer from Palm OS PDA memos in 2002
@@ -785,6 +790,7 @@ def bwt_decode(bw,eof):
     
     del(t[-len(eof):])
     return t
+
 
 
 def reuse_unused_chars_shiftdown(compressed):
@@ -1647,6 +1653,7 @@ def process_candidates_v2(candidates):
 
     mutual_overlaps = []
     overlap_idx = 0
+    jump = 0
 
     while(idx < len(candidates)):
         
@@ -1670,24 +1677,37 @@ def process_candidates_v2(candidates):
                 debugw(code)
                 debugw(code_lookahead)
                 
+                
                 #add mutually overlapping indexes to an array
                 if(first_overlap):
+                    debugw("first overlap")
                     mutual_overlaps.append([idx])
                     mutual_overlaps[overlap_idx].append(idx_lookahead)
+                    debugw("mutual_overlaps")
+                    debugw(mutual_overlaps)
                     first_overlap = False
-
+                    overlap_idx += 1
+                
                 else:
                     # case for a mutual overlap of at least 3 ngrams
                     debugw("len mutual overlap:")
                     debugw(len(mutual_overlaps))
                     debugw("overlap_idx")
                     debugw(overlap_idx)
-                    mutual_overlaps[overlap_idx].append(idx_lookahead)
-                 
-                    overlap_idx += 1
-                
+
+                    debugw("mutual_overlaps_before")
+                    debugw(mutual_overlaps)
+               
+                    mutual_overlaps[overlap_idx-1].append(idx_lookahead)
+                    debugw("mutual_overlaps")
+                    debugw(mutual_overlaps)
+                    jump += 1
+                    debugw("jump")
+                    debugw(jump)   
+                    
             else:
                 #end of mutual overlap (current lookahead is not overlapping with original idx)
+                idx += jump
                 break
         idx += 1        
     #keep best ratio from all overlap lists
@@ -2017,7 +2037,7 @@ def Decode_Huffmann_RLE_BWT(compressed):
         debugw(int.from_bytes(compressed[idx:idx+1],'little'))
 
         # special cases backward checks
-        rle_sep_found = (int.from_bytes(compressed[idx:idx+1],'little') == int.from_bytes(rle_sep,'little'))
+        rle_sep_found = (int.from_bytes(compressed[idx:idx+1],'little') == rle_sep)
         #char_before_is_rle_sep = (int.from_bytes(compressed[idx-1:idx+1-1],'little') == int.from_bytes(rle_sep,'little'))
         #char_idx_1_is_255 = (int.from_bytes(compressed[idx-1:idx+1-1],'little') == 255)
         #char_idx_2_is_255 = (int.from_bytes(compressed[idx-2:idx+1-2],'little') == 255)
@@ -2170,8 +2190,6 @@ else:
         
 
 
-
-
 idx = 0
 debugw("first ngram in dict:")
 test = ngram_dict_rev[0]
@@ -2179,9 +2197,8 @@ debugw(test)
 debugw(ngram_dict[test])
 count = 0
 
-
-if (compress):
-
+def compress_file(infile,outfile):
+    
     tokens = []
     # check if file is utf-8
     if(check_file_is_utf8(infile)):
@@ -2512,7 +2529,7 @@ if (compress):
         #codec_final_pass.load("huffmann_test.bin")
         #codec_final_pass = HuffmanCodec.from_frequencies(frequency_dic)
         #codec_final_pass.save("huffmann_final_pass.bin")
-        codec_final_pass.print_code_table()
+        #codec_final_pass.print_code_table()
         
         compressed4 = codec_final_pass.encode(compressed3)
         compressed4_bytesarray = bytearray(compressed4)
@@ -2648,9 +2665,31 @@ if (compress):
         """
     fh.close()
 
-# decompress mode
+
+def scan_files(folder_path,extension):
+    for root, dirs, files in os.walk(folder_path):
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+            if file_name.endswith('.'):  # You can adjust the file extension as needed
+                print("will process:" + str(file_path))
+                out_file_name = file_name + extension 
+                out_file_path = os.path.join(root, out_file_name)
+                print("into:" + str(out_file_path))
+                compress_file(file_path,out_file_path)
+
+
+if (compress):
+
+    if(batch):
+        inpath = infile
+        out_ext = outfile
+        scan_files(inpath,out_ext)
+    else:
+        compress_file(infile,outfile)
+
 else:
 
+    # decompress mode
     # decoding part
     debugw("decoding...")
     detokenizer = []

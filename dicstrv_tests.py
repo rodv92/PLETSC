@@ -193,7 +193,7 @@ from dahuffman import HuffmanCodec
 #print(op)
 #quit()
 
-if ((len(sys.argv) < 3) or (len(sys.argv) > 4)):
+if ((len(sys.argv) < 3) or (len(sys.argv) > 5)):
     print("Syntax for compression :\n")
     print("python3 dicstrv.py -c <txt_inputfile> <compressed_outputfile>")
     print("Reads txt_inputfile and writes compressed text stream to compressed_outputfile.\n") 
@@ -217,6 +217,8 @@ if ((len(sys.argv) < 3) or (len(sys.argv) > 4)):
     print("NOTE: dictionary file count1_w.txt must be in the same directory as the script.")    
     quit()
 
+no_final_huf = False
+
 if (sys.argv[1] == "-c"):
     batch = False
     compress = True
@@ -227,6 +229,9 @@ if (sys.argv[1] == "-bc"):
     gendic = False
     huffmann_only = False
     batch = True
+    if(sys.argv[-1] == "-nfh"):
+        no_final_huf = True
+
 elif (sys.argv[1] == "-d"):
     batch = False
     compress = True
@@ -253,12 +258,12 @@ else:
 if (len(sys.argv) == 3):
     infile = sys.argv[2]
     outfile = ''
-if (len(sys.argv) == 4):
+if (len(sys.argv) >= 4):
     infile = sys.argv[2]
     outfile = sys.argv[3]
 
 
-debug_on = True
+debug_on = False
 debug_ngrams_dic = False
 secondpass = True
 use_huffmann = False
@@ -850,7 +855,8 @@ def reuse_unused_chars_shiftdown(compressed):
         # swap 254 into absent sequence.
         abs_seqs  = find_absent_sequences(compressed,1,abs_chars[0])
 
-        abs_chars[0] = bytearray((abs_seqs[0]).to_bytes(2,'little'))
+        #abs_chars[0] = bytearray((abs_seqs[0]).to_bytes(2,'little'))
+        abs_chars[0] = abs_seqs[0]
         abs_chars.append(tmpchar) # tmpchar is the char in which bwt eof (255) has been swapped into.
         
         debugw("will swap 255 into the lone absent char")
@@ -865,7 +871,7 @@ def reuse_unused_chars_shiftdown(compressed):
                 debugw("replacing: 255 with: " + str(abs_seqs[0]))
                 compressed_new.extend(abs_chars[0])
             elif (byte_and_pos[1] == 254):
-                debugw("replacing: 254 with: " + tmpchar)
+                debugw("replacing: 254 with: " + str(tmpchar))
                 compressed_new.append(tmpchar)
             else:
                 debugw("other character, no change")
@@ -1149,13 +1155,20 @@ def encode_unknown(token,treecode):
         for charidx in range(0, len(token)):
             debugw("appending chars..")
             debugw(token[charidx])
-
-            # only append if it is not an unexpected termination in the unknown token
-            if (not ord(token[charidx]) == 0):
-                bytes_unknown.append(ord(token[charidx]))
+            
+            token_char_ascii = token[charidx].encode('ascii','ignore') # this is DANGEROUS / silent drop
+            debugw("appending chars - after ASCII encode/ignore")
+            debugw(token_char_ascii)
+            
+            debugw("appending char ord") # this is DANGEROUS / silent drop
+            if(token_char_ascii):
+                # only append if it is not an unexpected termination in the unknown token
+                if (not ord(token_char_ascii) == 0):
+                    bytes_unknown.append(ord(token_char_ascii))
+                else:
+                    debugw("unexpected termination chr(0) in unknown token, discarding character")
             else:
-                debugw("unexpected termination chr(0) in unknown token, discarding character")
-
+                debugw("non ascii character in unknown token, silent drop")
 
         return bytes_unknown
     if (treecode == 1):
@@ -1720,6 +1733,9 @@ def process_candidates_v2(candidates):
         
         for candidate_idx in overlap:
 
+            if((candidate_idx - remove_idx_shift) < 0):
+                debugw("end candidates tag best")
+                break
             debugw("candidate_idx:")
             debugw(candidate_idx)
             candidate_ratio = candidates[candidate_idx - remove_idx_shift][3]
@@ -1735,7 +1751,11 @@ def process_candidates_v2(candidates):
             if(candidate_idx != keep_idx):
                 debugw("candidate len:")
                 debugw(len(candidates))
-                
+
+                if((candidate_idx - remove_idx_shift) < 0):
+                    debugw("end candidates delete")
+                    break
+
                 debugw("will delete idx:")
                 debugw(str(candidate_idx - remove_idx_shift))
                 
@@ -1743,7 +1763,11 @@ def process_candidates_v2(candidates):
                 deleted_candidates_number += 1
                 debugw("deleted idx:")
                 debugw(str(candidate_idx - remove_idx_shift))
+                debugw("len(candidates) after remove:")
+                debugw(len(candidates))
                 remove_idx_shift += 1
+                debugw("remove_idx_shift after increment")
+                debugw(remove_idx_shift)
                 #keep the best ratio only from the list of mutual overlaps
 
     if (deleted_candidates_number > 0):
@@ -2499,7 +2523,7 @@ def compress_file(infile,outfile):
             
             # format : abs_char[0] = absent sequence of two different chars that do not contain 255,254 or absent_char to make room bwt eof 255
             # format : abs_char[1] = tmpchar (original absent char). the char in which rle sep (254) has been swapped into. 
-            compressed3[:0] = absent_chars[1] # prepend char in which rle sep has been swapped into.       
+            compressed3[:0] = [absent_chars[1]] # prepend char in which rle sep has been swapped into.       
             compressed3[:0] = absent_chars[0] # prepend absent sequence used to make room for bwt eof.      
             compressed3[:0] = bytearray(b'\xFE') # prepend char to signify single absent char        
         
@@ -2531,13 +2555,18 @@ def compress_file(infile,outfile):
         #codec_final_pass.save("huffmann_final_pass.bin")
         #codec_final_pass.print_code_table()
         
-        compressed4 = codec_final_pass.encode(compressed3)
-        compressed4_bytesarray = bytearray(compressed4)
-        frequency4 = Counter(compressed4).most_common()
-        frequency_dic4 = {}
+        if(not no_final_huf):
 
-        for (ascii_code, count) in frequency4:
-            frequency_dic4[ascii_code] = count
+            compressed4 = codec_final_pass.encode(compressed3)
+            compressed4_bytesarray = bytearray(compressed4)
+            frequency4 = Counter(compressed4).most_common()
+            frequency_dic4 = {}
+
+            for (ascii_code, count) in frequency4:
+                frequency_dic4[ascii_code] = count
+
+        else:
+            compressed4 = compressed3
 
         """
         posit_idx = {}
@@ -2670,12 +2699,18 @@ def scan_files(folder_path,extension):
     for root, dirs, files in os.walk(folder_path):
         for file_name in files:
             file_path = os.path.join(root, file_name)
-            if file_name.endswith('.'):  # You can adjust the file extension as needed
-                print("will process:" + str(file_path))
-                out_file_name = file_name + extension 
+            if (file_name.endswith('.')):
+                out_file_name = file_name + extension
                 out_file_path = os.path.join(root, out_file_name)
-                print("into:" + str(out_file_path))
-                compress_file(file_path,out_file_path)
+                if (not(os.path.isfile(out_file_path))):  # You can adjust the file extension as needed
+                    print("will process:" + str(file_path)) 
+                    print("into:" + str(out_file_path))
+                    compress_file(file_path,out_file_path)
+                else:
+                    print("file already processed:" + str(out_file_name))
+
+            else:
+                print("file not to process:" + str(file_name))
 
 
 if (compress):

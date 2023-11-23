@@ -73,31 +73,80 @@ previous stage, take the highest absent, and shift all characters ascii codes ab
 
 - Fourth stage : A byte based RLE, using an absent byte as separator from the second pass.
 
-Obviously fourth stage needs third stage to be effective, which means that there needs to be at least 2 absent characters in the second pass. If this requirement is not met bwt and rle won't be attempted.
-Usually, smallish to medium size texts or messages will have available chars.
-For lager texts, this won't be the case, and TODO : a multiple character separator could be envisionned, since repetitions will also increase in size. However using a multiple character EOF in the BWT needs special attention.
+Obviously fourth stage needs third stage to be effective, which means that there needs to be at least 2 absent characters in the second pass, one as RLE separator and the other as BWT eof.
+
+The RLE encoding format is :
+
+the format being for less than 255 repeats :
+char_to_repeat,rle separator, number of repetitions on one byte
+for less than 65535 repeats :
+char_to_repeat,rle separator, 255, number of repetitions on two bytes, LE.
+
+As for BWT, the eof is appended to the end of string before encoding and stripped off after decoding.
+
+
+If there are no two absent chars in the binary stream, the stream will be scanned for one or two ABSENT sequences of two non identical characters not containing 254 or 255, or the single absent char, starting from the top, and with the two sequences not overlapping - if two sequences are needed.
+
+If there is only one absent char, it will be complemented by one two byte sequence that follows the above requirements
+If there is not a single absent char, it will be complemented by two, two byte sequences that follows the above requirements
+
+exemple for two absent chars : 224 and 245.
+no need to generate two byte absent sequences.
+255 will be swapped into 224, now it is free and used as bwt eof and 245 will be used as rle separator.
+
+exemple for one absent char : 224.
+need to generate one two byte absent sequence.
+it will scan the compressed stream with a step of one byte returning two bytes at a time, and match them against
+the byte pairs ranging from (253,253) to (0,0) excluding all sequences where 224 appears, or where both bytes are equal
+so an example of valid sequences are :
+(225,223) - do not cotain 253 or 254 or 224.
+(252,251) - do not cotain 253 or 254 or 224.
+whereas :
+(225,225) - both bytes are equal
+(224,221) - sequence contain the absent char
+are not valid.
+
+example for no absent char.
+need to generate two two byte absent sequences.
+so an example of valid sequences are :
+(252,251) + (250,249) , no overlap and not containing 253 or 254
+whereas :
+(252,251) + (251,250) - sequences overlap on 251
+(252,251) + (250,250) - sequence two use two identical bytes.
+
+
+Usually, smallish texts < 1000 bytes will have two absent chars.
+Usually, smallish texts < 4096 bytes will have one asent absent chars.
+
 
 - Fifth stage : prepending the header to the file/stream, to inform on how to decompress the file/stream.
 
 It consists, for the first byte
-  - xFF to signify the use of BWT+RLE (todo : use flags for more configurations options)
+  - xFF to signify the use of BWT+RLE (todo : use flags for more configurations options) and there are two absent chars
   or
+  - xFE to signify the use of BWT+RLE (todo : use flags for more configurations options) and there is one absent char
+  - xFD to signify the use of BWT+RLE (todo : use flags for more configurations options) and there is zero absent char
   - x00 : no BWT or RLE
 
-then if the first byte is xFF. the next byte is the RLE separator, and next is the absent byte above which all ascii chars in the stream before BWT were shifted down, so that xFF is free. xFF is the bwt EOF.
+then if the first byte is xFF. the next byte is the RLE separator, and the next the absent char that the bwt eof 255 will be swapped into, in order to free it.
+
+if the first byte is xFE, the next byte is the RLE separator, and the next two is an absent sequence used to swap 255 into.
+if the first byte is xFD, the next two byte is an absent sequence to swap the RLE separator (254) into, and the next two is an absent sequence used to swap bwt eof (255) into.
 
 
 - And finally a huffmann encoding that will be trained on averaged binary files states from the second pass. Its compression efficiency is expected to be reduced since RLE took care of repeating chars over a number of 4 repetitions, but should still be useful, some repetitions are < 4, some repetitions are disjointed, etc...
 
 TODO : make the last pass huffmann tree adaptive : 
-It should follow the shift of ASCII codes down in third stage just before BWT. Since we have the unused char information in the header, this should be trivial and improve compression somewhat.
-The highest gain would be if the unused char is really low in the ascii table, which should not happen,
-as these reflect super frequent tokens. ex ASCII code x01 = 'the' in count1_w.txt would probably be used and show after pass 2.
-This would mainly help for 'pathological' texts/messages.
+The goal here is to generate a large number of compressed streams from several txt files (batch mode) that stop at the fifth stage, and check ascii code frequency for each compressed file, and update a master character frequency table (with the weight of each file according to master_freq_table += file_freq_table*(current_file_size/total_procssed_files_size))
+
+This approach is less memory / fs intensive than concatenating a large corpus of txt files and processing it in one
+large chunk.
+For now, the goal is to generate this final huffmann tree based on a business oriented corpus of mails such as the Enron dataset. For this, the dataset will be curated to prune the MIME mail headers and formatting such as "----------- Follow"
+or other mail follow-ups formatting sequences.
 
 
-The file with the huffmann tree for the final pass is "huffmann_final_pass.bin"
-it has been trained on a really limited number of second pass data, so there is room to get less context
+The file with the huffmann tree for the final pass will be called "huffmann_final_pass.bin"
+it has been trained as of today on a really limited number of second pass data, so there is room to get less context
 sensitive (more averaged) results.
 
 # Performance :

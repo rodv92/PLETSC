@@ -263,7 +263,7 @@ if (len(sys.argv) >= 4):
     outfile = sys.argv[3]
 
 
-debug_on = False
+debug_on = True
 debug_ngrams_dic = False
 secondpass = True
 use_huffmann = False
@@ -1579,9 +1579,9 @@ def compress_second_pass(compressed):
                    char = compressed[idx+3+idxchar]
                    debugw("char=")
                    debugw(char)
-            debugw("end of unknown token sequence detected at idx:")
             idx += (3 + idxchar)
-            debugw(idx)
+            debugw("end of unknown token sequence detected at idx:" + str(idx))
+            debugw("check char value:" + str(compressed[idx]))
             index_jumps.append(3 + idxchar)
             ngram_length -= 1
             reset_ngram = True
@@ -1855,6 +1855,8 @@ def replace_candidates_in_processed_v2(candidates,processed):
     # in place replace (without del)
     byteshift = 0
     shiftcode = 0
+    len_before_replace = len(processed)
+    debugw("len(processed) before replace: " + str(len_before_replace))
     debugw("total candidates to replace:")
     debugw(len(candidates))
     candidate_idx = 0
@@ -1882,6 +1884,9 @@ def replace_candidates_in_processed_v2(candidates,processed):
             candidate_idx += 1
             debugw("replaced candidate: " + str(candidate_idx) + " of: " + str(len(candidates)))
 
+    len_after_replace = len(processed)
+    debugw("len(processed) after replace: " + str(len_after_replace))
+    debugw("len reduction: " + str(len_before_replace - len_after_replace))
     return processed
 
 
@@ -2002,6 +2007,7 @@ def decompress_ngram_bytes(compressed):
             # increment byte counter with step 3, we processed 3 bytes.
             idx += 3
 
+    debugw("detokenizer_ngram: " + str(detokenizer_ngram))
     return detokenizer_ngram
 
 def Decode_Huffmann_RLE_BWT(compressed):
@@ -2319,6 +2325,8 @@ def compress_file(infile,outfile):
         checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed])
         debugw("checkpoint_compress after pass 2")
         debugw(checkpoint)
+        len_before_shiftdown = len(compressed)
+        debugw("len before shiftdown: " + str(len_before_shiftdown))
         
         frequency = Counter(compressed).most_common()
         frequency_dic = {}
@@ -2378,6 +2386,10 @@ def compress_file(infile,outfile):
         checkpoint = "".join([f"\\x{byte:02x}" for byte in compressed])
         debugw("checkpoint_compress after shiftdown")
         debugw(checkpoint)
+        len_after_shiftdown = len(compressed)
+        debugw("len after shiftdown: " + str(len_after_shiftdown))
+        debugw("len gain+/loss-: " + str(len_after_shiftdown - len_after_shiftdown))
+        
 
         # force not to use RLE and BWT
         #absent_chars =  [-1]
@@ -2518,13 +2530,20 @@ def compress_file(infile,outfile):
             compressed3 = compressed
             debugw("not a single absent char, not performing wheeler and rle")
 
+        len_after_rle = len(compressed3)
+        debugw("len after rle: " + str(len_after_rle))
+        debugw("len gain+/loss-: " + str(len_after_rle - len_after_shiftdown))
+
+
         if (isinstance(absent_chars[0],int) and (isinstance(absent_chars[1],int))):
         
             
             compressed3[:0] = [absent_chars[1]] # prepend BWT highest absent char in bin, in order to shift back in decompression.       
             compressed3[:0] = [absent_chars[0]] # prepend RLE separator       
             compressed3[:0] = bytearray(b'\xFF') # prepend BWT eof to signal use of bwt+rle TODO: use bit flags        
-        
+            debugw("header:")
+            debugw(compressed3[0:3])
+
         
         elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],int))):
             
@@ -2532,7 +2551,10 @@ def compress_file(infile,outfile):
             # format : abs_char[1] = tmpchar (original absent char). the char in which rle sep (254) has been swapped into. 
             compressed3[:0] = [absent_chars[1]] # prepend char in which rle sep has been swapped into.       
             compressed3[:0] = absent_chars[0] # prepend absent sequence used to make room for bwt eof.      
-            compressed3[:0] = bytearray(b'\xFE') # prepend char to signify single absent char        
+            compressed3[:0] = bytearray(b'\xFE') # prepend char to signify single absent char
+            debugw("header:")
+            debugw(compressed3[0:4])
+        
         
         elif (isinstance(absent_chars[0],bytearray) and (isinstance(absent_chars[1],bytearray))):
             
@@ -2541,16 +2563,24 @@ def compress_file(infile,outfile):
             compressed3[:0] = absent_chars[1] # prepend absent sequence used to make room for rle sep.       
             compressed3[:0] = absent_chars[0] # prepend absent sequence used to make room for bwt eof.              
             compressed3[:0] = bytearray(b'\xFD') # prepend char to signify no absent char   TODO: use bit flags        
-        
+            debugw("header:")
+            debugw(compressed3[0:5])
+
+
         else:
             compressed3[:0] = bytearray(b'\x00') # 0 to signal neither bwt or rle was performed.
+            debugw("header:")
+            debugw(compressed3[0])
+
         
         debugw("absent_chars:")
         debugw(absent_chars)
-        debugw("header:")
-        debugw(compressed3[0:5])
-        debugw("compressed length after rle:")
-        debugw(len(compressed3))
+
+
+        len_after_header = len(compressed3)
+        debugw("len after header add: " + str(len_after_header))
+        debugw("len gain+/loss-: " + str(len_after_header - len_after_rle))
+
 
         codec_final_pass = HuffmanCodec.load("huffmann_final_pass.bin") #based on compressed interface.txt (interface.bin)
 
@@ -2574,6 +2604,12 @@ def compress_file(infile,outfile):
 
         else:
             compressed4 = compressed3
+
+        len_after_final_pass = len(compressed4)
+        debugw("len after huffmann_final_pass: " + str(len_after_final_pass))
+        debugw("len gain+/loss-: " + str(len_after_final_pass - len_after_header))
+
+
 
         """
         posit_idx = {}
@@ -3064,6 +3100,8 @@ else:
                         detokenizer.append(" ") 
                         detokenizer_idx += 1
     
+                    idx += 3 + idxchar
+
                 else:
 
                     inta += 2097151
@@ -3097,10 +3135,9 @@ else:
                             debugw(engdict[sessidx])
                             debugw(engdictrev[engdict[sessidx]])
                             debugw("session_index:" + str(sessidx))
-
-
-                idx += 3 + idxchar
-
+                    
+                    idx += 3
+                
     debugw(detokenizer)
     if not(len(outfile)):
         print(''.join(detokenizer))

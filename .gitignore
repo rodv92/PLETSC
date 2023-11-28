@@ -1,5 +1,8 @@
+*.png
 *.txt
 *.bin
 *.csv
 *.rec
+*.bin
 archive
+TRAIN/

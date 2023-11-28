@@ -1047,7 +1047,14 @@ def replace_repeating_chars(byte_array, n, separator):
 
     # Check for the last character sequence
     if count >= n:
-        encoded_value = bytes([current_char, separator, count])
+        encoded_value = bytearray(current_char.to_bytes(1,'little'))
+        encoded_value.extend(separator.to_bytes(1,'little'))
+        if (count < 255):
+            encoded_value.append(count.to_bytes(1,'little')[0])
+        else:
+            encoded_value.append(255)
+            encoded_value.extend(count.to_bytes(2,'little'))  
+        #encoded_value = bytes([current_char, separator, count])
         result_array.extend(encoded_value)
     else:
         result_array.extend(byte_array[current_start:])

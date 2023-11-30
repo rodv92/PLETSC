@@ -1,6 +1,12 @@
 # PLETSC
 Lightweight english text stream compression, with word tokens, ngrams, session dictionaries and Huffmann for unknown words.
 
+# License : GPL v3.0
+
+# Credits :
+
+Optimized Burrow Wheeler transform (using a suffix array) is based on the code of Sacha Schutz. https://dridk.me/bwt.html
+
 # How to use :
 
 git clone and

@@ -9,8 +9,8 @@
 #GPL 3 License
 # www.skynext.tech
 # Rodrigo Verissimo
-# v0.93
-# November 20th, 2023
+# v0.94
+# April 25th, 2024
 
 
 # Python + packages Requirements
@@ -193,7 +193,63 @@ from dahuffman import HuffmanCodec
 #print(op)
 #quit()
 
-if ((len(sys.argv) < 3) or (len(sys.argv) > 5)):
+
+no_final_huf = False
+
+if (sys.argv[1] == "-i"):
+    interactive = True
+    batch = False
+    compress = False
+    gendic = False
+    huffmann_only = False
+
+elif (sys.argv[1] == "-c"):
+    interactive = False
+    batch = False
+    compress = True
+    gendic = False
+    huffmann_only = False
+elif (sys.argv[1] == "-bc"):
+    interactive = False
+    compress = True
+    gendic = False
+    huffmann_only = False
+    batch = True
+    if(sys.argv[-1] == "-nfh"):
+        no_final_huf = True
+
+elif (sys.argv[1] == "-d"):
+    interactive = False
+    batch = False
+    compress = True
+    gendic = True
+    huffmann_only = False
+elif (sys.argv[1] == "-x"):
+    interactive = False
+    batch = False
+    compress = False
+    gendic = False
+    huffmann_only = False
+elif (sys.argv[1] == "-hc"): # only use huffmann compression - to compare performance.
+    interactive = False
+    batch = False
+    compress = True
+    gendic = False
+    huffmann_only = True
+elif (sys.argv[1] == "-hx"): # only yse huffmann decompression - to compare performance.
+    interactive = False
+    batch = False
+    compress = False
+    gendic = False
+    huffmann_only = True
+else:
+    print("unknown operation: " + str(sys.argv[0]) + " type 'python3 dicstrv3.py' for help")
+
+
+print(interactive)
+
+
+if (((len(sys.argv) < 3) or (len(sys.argv) > 5)) and not interactive):
     print("Syntax for compression :\n")
     print("python3 dicstrv.py -c <txt_inputfile> <compressed_outputfile>")
     print("Reads txt_inputfile and writes compressed text stream to compressed_outputfile.\n") 
@@ -217,53 +273,16 @@ if ((len(sys.argv) < 3) or (len(sys.argv) > 5)):
     print("NOTE: dictionary file count1_w.txt must be in the same directory as the script.")    
     quit()
 
-no_final_huf = False
-
-if (sys.argv[1] == "-c"):
-    batch = False
-    compress = True
-    gendic = False
-    huffmann_only = False
-if (sys.argv[1] == "-bc"):
-    compress = True
-    gendic = False
-    huffmann_only = False
-    batch = True
-    if(sys.argv[-1] == "-nfh"):
-        no_final_huf = True
-
-elif (sys.argv[1] == "-d"):
-    batch = False
-    compress = True
-    gendic = True
-    huffmann_only = False
-elif (sys.argv[1] == "-x"):
-    batch = False
-    compress = False
-    gendic = False
-    huffmann_only = False
-elif (sys.argv[1] == "-hc"): # only use huffmann compression - to compare performance.
-    batch = False
-    compress = True
-    gendic = False
-    huffmann_only = True
-elif (sys.argv[1] == "-hx"): # only yse huffmann decompression - to compare performance.
-    batch = False
-    compress = False
-    gendic = False
-    huffmann_only = True
-else:
-    print("unknown operation: " + str(sys.argv[0]) + " type 'python3 dicstrv3.py' for help")
-
-if (len(sys.argv) == 3):
-    infile = sys.argv[2]
-    outfile = ''
-if (len(sys.argv) >= 4):
-    infile = sys.argv[2]
-    outfile = sys.argv[3]
+if not interactive:
+    if (len(sys.argv) == 3):
+        infile = sys.argv[2]
+        outfile = ''
+    if (len(sys.argv) >= 4):
+        infile = sys.argv[2]
+        outfile = sys.argv[3]
 
 
-debug_on = True
+debug_on = False
 debug_ngrams_dic = False
 secondpass = True
 use_huffmann = False
@@ -2139,104 +2158,21 @@ def Decode_Huffmann_RLE_BWT(compressed):
     
     return compressed_new2
 
-###INLINE START###
-
-#downloading tokenizer model if missing
-nltk.download('punkt')
-
-#opening the english dict of most used 1/3 million words from google corpus of 1 trillion words.
-#special characters have been added with their respective prevalence (from wikipedia corpus)
-#contractions also have been added in their form with a quote just after (next line) the form 
-# without quote. ex : next line after "dont" appears "don't"
-
-#initializing Python dicts
-count = 1
-engdict = {}
-engdictrev = {}
 
 
-if (not os.path.isfile('count_1w.pickle')):
-
-
-    debugw("first load of dic")
-    file1 = open('count_1w.txt', 'r')
-    Lines = file1.readlines()
-
-    # special case : byte val 0 is equal to new line.
-    # TODO : make sure that windows CRLF is taken care of.
-    engdict[0] = "\n"
-    engdictrev["\n"] = 0
-
-    # populating dicts
-    for line in Lines:
-        # Strips the newline character
-        engdict[count] = line.strip()
-        engdictrev[line.strip()] = count
-        count += 1
-
-    debugw("pickling dictionaries")
-    with open('count_1w.pickle', 'wb') as handle:
-        pickle.dump(engdict, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        pickle.dump(engdictrev, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-else:
-
-    debugw("loading pickled dictionaries")
-    with open('count_1w.pickle', 'rb') as handle:
-        engdict = pickle.load(handle)
-        engdictrev = pickle.load(handle)
-        
-
-
-ngram_dict = {}
-ngram_dict_rev = {}
-
-if (not os.path.isfile('ountgrams.pickle')):
-
-    ### populating ngram dict
-
-    filengrams = open('outngrams.bin', 'rt')
-    ngramlines = filengrams.readlines()
-
-    count = 0
-    # populating dicts
-    for ngramline in ngramlines:
-    # Strips the newline character
-        #keystr = "".join([f"\\x{byte:02x}" for byte in ngramline.strip()])
-        #keystr = keystr.replace("\\","")
-        #if(count == 71374):
-        keystr = ngramline.strip()
-        #print(ngramline.strip())
-        #print(keystr)
-        #quit()
-        ngram_dict_rev[count] = keystr
-        ngram_dict[keystr] = count
-        count += 1
-
-    debugw("pickling ngram dictionaries")
-    with open('outngrams.pickle', 'wb') as handle:
-        pickle.dump(ngram_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        pickle.dump(ngram_dict_rev, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-else:
-
-    debugw("loading pickled ngram dictionaries")
-    with open('outngrams.pickle', 'rb') as handle:
-        ngram_dict = pickle.load(handle)
-        ngram_dict_rev = pickle.load(handle)
-        
-
-
-idx = 0
-debugw("first ngram in dict:")
-test = ngram_dict_rev[0]
-debugw(test)
-debugw(ngram_dict[test])
-count = 0
 
 def compress_file(infile,outfile):
     
     tokens = []
+
+    # we use a 'static' variable as a workaround for bad file descriptor error when trying to reopen stdout using
+    # os.fdopen(sys.stdin.fileno(), 'wb', 0) in subsequent calls to compress_file in interactive mode.
+    # with a static variable, initialized at the end of the function, os.fdopen(sys.stdin.fileno(), 'wb', 0)  is called only once.
+    # if we have to write to a file, compress_file.fh initialization to stdout is overwritten : compress_file.fh = open(outfile, 'wb')
+    
+    if(len(outfile)):
+        compress_file.fh = open(outfile, 'wb')
+
     # check if file is utf-8
     if(check_file_is_utf8(infile)):
         with codecs.open(infile, 'r', encoding='utf-8') as utf8_file:
@@ -2264,16 +2200,16 @@ def compress_file(infile,outfile):
                huff_compressed = codec_all_whitespace.encode(file2.read())
 
     if(huffmann_only):
-        if(len(outfile)):
-            fh = open(outfile, 'wb')
-            fh.write(huff_compressed)
-            fh.close()
-            quit()
+        #if(len(outfile)):
+        #    fh = open(outfile, 'wb')
+        compress_file.fh.write(huff_compressed)
+        compress_file.fh.close()
+        quit()
 
 
     if(gendic):
-         if(len(outfile)):
-                fh = open(outfile, 'wt')
+        #if(len(outfile)):
+        compress_file.fh = open(outfile, 'wt')
 
     lineidx = 0
     for line in Linesin:
@@ -2291,15 +2227,15 @@ def compress_file(infile,outfile):
                 # write compressed binary stream to file if supplied in args or to stdout otherwise.
                 hexstr = "".join([f"\\x{byte:02x}" for byte in compressed])
                 hexstr = hexstr.replace("\\","")
-                fh.write(hexstr)
+                compress_file.fh.write(hexstr)
                 if(debug_ngrams_dic):
-                    fh.write("\t")
+                    compress_file.fh.write("\t")
                     strline = str(lineidx)
-                    fh.write(strline)
-                fh.write("\n")
+                    compress_file.fh.write(strline)
+                compress_file.fh.write("\n")
             else:
-                sys.stdout.buffer.write(compressed)
-                sys.stdout.buffer.write(b"\n")
+                compress_file.fh.write(compressed)
+                #sys.stdout.buffer.write(b"\n")
         lineidx += 1
     #line_tokens.append("\n")
     #tokens = tokens + line_tokens
@@ -2716,11 +2652,13 @@ def compress_file(infile,outfile):
         ## now delta encode.
 
         # write compressed binary stream to file if supplied in args or to stdout otherwise.
-        if(len(outfile)):
-            with open(outfile, 'wb') as fh:
-                fh.write(compressed4)
-        else:
-            sys.stdout.buffer.write(compressed4)
+        
+        #if(len(outfile)):
+        #    with open(outfile, 'wb') as fh:
+        #        fh.write(compressed4)
+        #else:
+        
+        compress_file.fh.write(compressed4)
 
         for sessidx in range(2113664,unknown_token_idx):
             debugw("session_index:" + str(sessidx))
@@ -2735,7 +2673,9 @@ def compress_file(infile,outfile):
         for key,value in sorted(frequency_dic2.items()):
             print(key,value)
         """
-    fh.close()
+    if len(outfile): compress_file.fh.close()
+    #fh.close()
+compress_file.fh = os.fdopen(sys.stdin.fileno(), 'wb', 0)
 
 
 def scan_files(folder_path,extension):
@@ -2755,6 +2695,130 @@ def scan_files(folder_path,extension):
             else:
                 print("file not to process:" + str(file_name))
 
+
+###INLINE START###
+
+#downloading tokenizer model if missing
+nltk.download('punkt')
+
+#opening the english dict of most used 1/3 million words from google corpus of 1 trillion words.
+#special characters have been added with their respective prevalence (from wikipedia corpus)
+#contractions also have been added in their form with a quote just after (next line) the form 
+# without quote. ex : next line after "dont" appears "don't"
+
+#initializing Python dicts
+count = 1
+engdict = {}
+engdictrev = {}
+
+
+if (not os.path.isfile('count_1w.pickle')):
+
+
+    debugw("first load of dic")
+    file1 = open('count_1w.txt', 'r')
+    Lines = file1.readlines()
+
+    # special case : byte val 0 is equal to new line.
+    # TODO : make sure that windows CRLF is taken care of.
+    engdict[0] = "\n"
+    engdictrev["\n"] = 0
+
+    # populating dicts
+    for line in Lines:
+        # Strips the newline character
+        engdict[count] = line.strip()
+        engdictrev[line.strip()] = count
+        count += 1
+
+    debugw("pickling dictionaries")
+    with open('count_1w.pickle', 'wb') as handle:
+        pickle.dump(engdict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(engdictrev, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+else:
+
+    debugw("loading pickled dictionaries")
+    with open('count_1w.pickle', 'rb') as handle:
+        engdict = pickle.load(handle)
+        engdictrev = pickle.load(handle)
+        
+
+
+ngram_dict = {}
+ngram_dict_rev = {}
+
+if (not os.path.isfile('ountgrams.pickle')):
+
+    ### populating ngram dict
+
+    filengrams = open('outngrams.bin', 'rt')
+    ngramlines = filengrams.readlines()
+
+    count = 0
+    # populating dicts
+    for ngramline in ngramlines:
+    # Strips the newline character
+        #keystr = "".join([f"\\x{byte:02x}" for byte in ngramline.strip()])
+        #keystr = keystr.replace("\\","")
+        #if(count == 71374):
+        keystr = ngramline.strip()
+        #print(ngramline.strip())
+        #print(keystr)
+        #quit()
+        ngram_dict_rev[count] = keystr
+        ngram_dict[keystr] = count
+        count += 1
+
+    debugw("pickling ngram dictionaries")
+    with open('outngrams.pickle', 'wb') as handle:
+        pickle.dump(ngram_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(ngram_dict_rev, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+else:
+
+    debugw("loading pickled ngram dictionaries")
+    with open('outngrams.pickle', 'rb') as handle:
+        ngram_dict = pickle.load(handle)
+        ngram_dict_rev = pickle.load(handle)
+        
+
+
+idx = 0
+debugw("first ngram in dict:")
+test = ngram_dict_rev[0]
+debugw(test)
+debugw(ngram_dict[test])
+count = 0
+
+if (interactive):
+
+    outfile = ''
+    msg = bytearray()
+    buf = ""
+    stdin_ub = os.fdopen(sys.stdin.fileno(), 'rb', buffering=0)
+
+    while(True):
+        
+        time.sleep(0.1)
+        buf = stdin_ub.readline()
+        msg += buf
+        if b'\x07' in buf:
+            #print("compressing message :")
+            msg = msg.replace(b'\x07', b'')
+            #print("replace ok")
+            msgfilename = str(int(round(time.time() * 1000))) + ".msg"
+            #print("generated file name")
+            fhu = open(msgfilename, 'wb')
+            #print("file open for writing")
+            fhu.write(msg)
+            #print("uncompressed msg written to file")
+            fhu.close()
+            #print("file closed")
+            compress_file(msgfilename,outfile)
+            print("\n")
+            msg = bytearray()
+    
 
 if (compress):
 

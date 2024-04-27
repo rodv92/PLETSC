@@ -187,13 +187,15 @@ import struct
 import time
 from dahuffman import HuffmanCodec
 
+import pycld2 as cld2
+from lingua import Language, LanguageDetectorBuilder
 
 #print(len(sys.argv))
 #op = (sys.argv[1]).encode("ascii").decode("ascii")
 #print(op)
 #quit()
 
-
+interactive = False
 no_final_huf = False
 
 if (sys.argv[1] == "-i"):
@@ -202,7 +204,6 @@ if (sys.argv[1] == "-i"):
     compress = False
     gendic = False
     huffmann_only = False
-
 elif (sys.argv[1] == "-c"):
     interactive = False
     batch = False
@@ -246,9 +247,6 @@ else:
     print("unknown operation: " + str(sys.argv[0]) + " type 'python3 dicstrv3.py' for help")
 
 
-print(interactive)
-
-
 if (((len(sys.argv) < 3) or (len(sys.argv) > 5)) and not interactive):
     print("Syntax for compression :\n")
     print("python3 dicstrv.py -c <txt_inputfile> <compressed_outputfile>")
@@ -272,6 +270,7 @@ if (((len(sys.argv) < 3) or (len(sys.argv) > 5)) and not interactive):
 
     print("NOTE: dictionary file count1_w.txt must be in the same directory as the script.")    
     quit()
+
 
 if not interactive:
     if (len(sys.argv) == 3):
@@ -2033,6 +2032,7 @@ def Decode_Huffmann_RLE_BWT(compressed):
 
     # Huffmann decode first
     final_pass_codec = HuffmanCodec.load("huffmann_final_pass.bin")
+    #final_pass_codec.print_code_table()
     compressed = final_pass_codec.decode(compressed)
 
     # checkpoint : printing after attempting BWT,RLE,Huffmann for debugging purposes
@@ -2183,6 +2183,8 @@ def compress_file(infile,outfile):
             # the best option for now it check for chr(0) presence before writing the unknown token representation.
             ascii_content = utf8_file.read().encode('ascii', 'ignore').decode('ascii')
             #debugw(ascii_content)
+            languages = detect_language(ascii_content)
+            #TODO : manage multiple languages
             Linesin = ascii_content.splitlines()
             if(debug_on):
                 outfile_ascii = infile + ".asc"
@@ -2194,9 +2196,12 @@ def compress_file(infile,outfile):
     else:
         # Reading file to be compressed
         file2 = open(infile,'r')
-        #text = file2.read()
-        Linesin = file2.readlines()
+        ascii_content = file2.read()
+        detect_language(ascii_content)
+        Linesin = ascii_content.splitlines(keepends=True)
+        #Linesin = file2.readlines()
         if(huffmann_only):
+               #TODO generate codec_all_whitespace for french too
                huff_compressed = codec_all_whitespace.encode(file2.read())
 
     if(huffmann_only):
@@ -2519,7 +2524,7 @@ def compress_file(infile,outfile):
 
 
         codec_final_pass = HuffmanCodec.load("huffmann_final_pass.bin") #based on compressed interface.txt (interface.bin)
-
+        #codec_final_pass.print_code_table()
         # TODO : use several compressed files from second pass compression (dic + ngram + session dic)
         # as a training base to get averaged context and more uniform final compression pass results.
         
@@ -2658,8 +2663,12 @@ def compress_file(infile,outfile):
         #        fh.write(compressed4)
         #else:
         
-        compress_file.fh.write(compressed4)
-
+        if(len(outfile)):
+            compress_file.fh.write(compressed4)
+        else:
+            compressed_hex = "".join([f"{byte:02x}" for byte in compressed4])
+            compress_file.fh.write(compressed_hex.encode('ascii'))
+        
         for sessidx in range(2113664,unknown_token_idx):
             debugw("session_index:" + str(sessidx))
             debugw(engdict[sessidx])
@@ -2673,8 +2682,10 @@ def compress_file(infile,outfile):
         for key,value in sorted(frequency_dic2.items()):
             print(key,value)
         """
-    if len(outfile): compress_file.fh.close()
-    #fh.close()
+    if len(outfile): 
+        compress_file.fh.close()
+
+    
 compress_file.fh = os.fdopen(sys.stdin.fileno(), 'wb', 0)
 
 
@@ -2695,6 +2706,33 @@ def scan_files(folder_path,extension):
             else:
                 print("file not to process:" + str(file_name))
 
+def detect_language(cleartext):
+    
+    #print(cleartext)
+    #isReliable, textBytesFound, details, vectors = cld2.detect(cleartext, returnVectors=True)
+    #if (isReliable):
+    #    print(details)
+    #    print(vectors)
+    #else:
+        #assume english
+        #return "en"
+    languages_detected = []
+    
+    languages = [Language.ENGLISH, Language.FRENCH]
+    detector = LanguageDetectorBuilder.from_languages(*languages).build()
+    for result in detector.detect_multiple_languages_of(cleartext):
+        language_details = (result.language.iso_code_639_1.name,result.start_index,result.end_index)
+        languages_detected.append(language_details)
+
+
+    return tuple(languages_detected)
+
+    
+
+
+def send_msg(compressed):
+    #Send compressed message over LoRa
+    pass
 
 ###INLINE START###
 
@@ -2840,6 +2878,13 @@ else:
     if(len(infile)):
         with open(infile, 'rb') as fh:
             compressed0 = bytearray(fh.read())
+            #compressed0bits = bitarray(endian='little')
+            #compressed0bits.frombytes(compressed0)
+            #print(len(compressed0bits))
+            #eof = bitarray('11110110111000',endian='little')
+
+            #eoflist = compressed0bits.search(eof)
+            #print(eoflist)
 
     #First we need to retrieve the preamble/header (separators)
     #and apply operations in reverse :

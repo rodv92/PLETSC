@@ -190,6 +190,8 @@ from dahuffman import HuffmanCodec
 import pycld2 as cld2
 from lingua import Language, LanguageDetectorBuilder
 
+from bidict import bidict
+
 #print(len(sys.argv))
 #op = (sys.argv[1]).encode("ascii").decode("ascii")
 #print(op)
@@ -281,7 +283,7 @@ if not interactive:
         outfile = sys.argv[3]
 
 
-debug_on = False
+debug_on = True
 debug_ngrams_dic = False
 secondpass = True
 use_huffmann = False
@@ -658,6 +660,102 @@ codec_all_whitespace = HuffmanCodec.from_frequencies(
 debugw(codec_all.get_code_table())
 #quit()
 #
+
+dicts = {}
+
+def load_dicts(lang_id):
+
+
+    #initializing Python dicts
+    count = 1
+    onegrams = bidict()
+    duplicate_onegrams_indexes = []
+
+
+    if (not os.path.isfile('count_1w.pickle')):
+
+
+        debugw("first load of dic")
+        file1 = open(lang_id + '_1w.txt', 'r')
+        Lines = file1.readlines()
+
+        # special case : byte val 0 is equal to new line.
+        # TODO : make sure that windows CRLF is taken care of.
+        onegrams[0] = "\n"
+
+        # populating dicts
+        for line in Lines:
+            try:
+                # Strips the newline character of the 1gram
+                onegrams[count] = line.strip()
+            except Exception as error:
+                print(error)
+                duplicate_onegrams_indexes.append(count)    
+            count += 1
+
+        debugw("pickling dictionaries")
+        with open(lang_id + '_1w.pickle', 'wb') as handle:
+            pickle.dump(onegrams, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    else:
+
+        debugw("loading pickled dictionaries")
+        with open(lang_id + '_1w.pickle', 'rb') as handle:
+            onegrams = pickle.load(handle)
+        
+
+
+
+    fourgrams = bidict()
+    duplicate_fourgrams_indexes = []
+
+
+    if (not os.path.isfile(lang_id + '_4w.pickle')):
+
+        ### populating ngram dict
+
+        filengrams = open(lang_id + '_4w.bin', 'rt')
+        ngramlines = filengrams.readlines()
+
+        count = 0
+        # populating dicts
+        for ngramline in ngramlines:
+        # Strips the newline character
+            #keystr = "".join([f"\\x{byte:02x}" for byte in ngramline.strip()])
+            #keystr = keystr.replace("\\","")
+            #if(count == 71374):
+            keystr = ngramline.strip()
+            #print(ngramline.strip())
+            #print(keystr)
+            #quit()
+            try:
+                fourgrams[keystr] = count
+            except Exception as error:
+                print(error)
+                duplicate_fourgrams_indexes.append(count)    
+            count += 1
+
+        debugw("pickling ngram dictionaries")
+        with open(lang_id + '_4w.pickle', 'wb') as handle:
+            pickle.dump(fourgrams, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    else:
+
+        debugw("loading pickled ngram dictionaries")
+        with open(lang_id + '_4w.pickle', 'rb') as handle:
+            fourgrams = pickle.load(handle)
+            
+    idx = 0
+    debugw("first ngram in dict:")
+    test = fourgrams.inverse[0]
+    debugw(test)
+    debugw(fourgrams[test])
+    count = 0
+
+    return onegrams , fourgrams
+
+
+
 
 def restore_unused_chars_shiftup(unused_seqs,compressed):
     # works in-place
@@ -1225,7 +1323,7 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
 
         # is the token in english dictionary ?
         debugw("line_token:" + line_token)
-        tokenid = engdictrev[line_token]
+        tokenid = dicts['en'][0].inverse[line_token]
         subtokensid = [tokenid]
 
         
@@ -1251,8 +1349,8 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             debugw("unknown word: " + subtokens[0] + " adding to session dic at id: " + str(unknown_token_idx))
             debugw("unknown word, adding to session dic at id: " + str(unknown_token_idx))
             
-            engdictrev[subtokens[0]] = unknown_token_idx
-            engdict[unknown_token_idx] = subtokens[0]
+            dicts['en'][0].inverse[subtokens[0]] = unknown_token_idx
+            dicts['en'][0][unknown_token_idx] = subtokens[0]
             unknown_token_idx += 1
                        
 
@@ -1267,7 +1365,7 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
                 debugw("subtoken=")
                 debugw(subtoken)
                 try:
-                    subtokensid.append(engdictrev[subtoken])
+                    subtokensid.append(dicts['en'][0].inverse[subtoken])
                 except:
                     # no luck...
                     # TODO : do not drop the word silently, encode it !
@@ -1288,8 +1386,8 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
                     # add this unknown subtoken to a session dic so it can be recalled.
                     debugw("unknown subtoken: " + subtoken + " adding to session dic at id: " + str(unknown_token_idx))
                     debugw("unknown subtoken, adding to session dic at id: " + str(unknown_token_idx))
-                    engdictrev[subtoken] = unknown_token_idx
-                    engdict[unknown_token_idx] = subtoken
+                    dicts['en'][0].inverse[subtoken] = unknown_token_idx
+                    dicts['en'][0][unknown_token_idx] = subtoken
                     unknown_token_idx += 1
                     #continue
     subtokenidx = 0
@@ -1301,7 +1399,7 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
         if(subtokenid < 128):
 
             debugw("super common word")
-            debugw(engdict[subtokenid])
+            debugw(dicts['en'][0][subtokenid])
 
             #convert to bytes
             byte0 = subtokenid.to_bytes(1, byteorder='little')
@@ -1316,7 +1414,7 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             debugw("common word")
 
             #remove offset
-            debugw(engdict[subtokenid])
+            debugw(dicts['en'][0][subtokenid])
             subtokenid -= 128
             
             #convert to bytes1 (array of 2 bytes)
@@ -1347,7 +1445,7 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             debugw("rare word")
             
             # remove offset
-            debugw(engdict[subtokenid])
+            debugw(dicts['en'][0][subtokenid])
             subtokenid -= (16384 + 128)
 
             #convert to bytes1 (array of 3 bytes)
@@ -1384,7 +1482,7 @@ def compress_token_or_subtoken(compressed,line_token,token_of_line_count,lentoke
             debugw("unknown word from session DIC")
             
             # remove offset
-            debugw(engdict[subtokenid])
+            debugw(dicts['en'][0][subtokenid])
             subtokenid -= (2097152 + 16384 + 128)
 
             #convert to bytes1 (array of 3 bytes)
@@ -1629,7 +1727,7 @@ def compress_second_pass(compressed):
                 ngram_compressed_no_ascii = "".join([f"\\x{byte:02x}" for byte in ngram_compressed])
                 ngram_compressed_no_ascii = ngram_compressed_no_ascii.replace("\\","")
                 debugw(ngram_compressed_no_ascii)
-                code = ngram_dict[ngram_compressed_no_ascii]
+                code = dicts['en'][1][ngram_compressed_no_ascii]
                 debugw("****FOUND*****")
                 ratio = ngram_byte_length/3 # all ngrams are encoded in a 3 byte address space, hence div by 3
                 removebytes = ngram_byte_length
@@ -1958,7 +2056,7 @@ def decompress_ngram_bytes(compressed):
             #decode in place
             
             inta = compressed[idx]        
-            detokenizer_ngram.append(engdict[inta])
+            detokenizer_ngram.append(dicts['en'][0][inta])
             idx += 1
 
         elif((compressed[idx] & 128) and (not (compressed[idx+1] & 128))):
@@ -1982,7 +2080,7 @@ def decompress_ngram_bytes(compressed):
             inta += 128
 
             # print word
-            detokenizer_ngram.append(engdict[inta])
+            detokenizer_ngram.append(dicts['en'][0][inta])
             # increment byte counter with step 2, we processed 2 bytes.
             idx += 2
 
@@ -2020,7 +2118,7 @@ def decompress_ngram_bytes(compressed):
 
             inta += (16384 + 128)
 
-            detokenizer_ngram.append(engdict[inta])
+            detokenizer_ngram.append(dicts['en'][0][inta])
 
             # increment byte counter with step 3, we processed 3 bytes.
             idx += 3
@@ -2671,8 +2769,8 @@ def compress_file(infile,outfile):
         
         for sessidx in range(2113664,unknown_token_idx):
             debugw("session_index:" + str(sessidx))
-            debugw(engdict[sessidx])
-            debugw(engdictrev[engdict[sessidx]])
+            debugw(dicts['en'][0][sessidx])
+            #debugw(dicts['en'][0].inverse[engdict[sessidx]])
             debugw("session_index:" + str(sessidx))
 
         """
@@ -2745,6 +2843,8 @@ nltk.download('punkt')
 # without quote. ex : next line after "dont" appears "don't"
 
 #initializing Python dicts
+
+"""
 count = 1
 engdict = {}
 engdictrev = {}
@@ -2828,6 +2928,18 @@ test = ngram_dict_rev[0]
 debugw(test)
 debugw(ngram_dict[test])
 count = 0
+"""
+
+dicts['en'] = load_dicts('en')
+# loads a tuple of (onegrams,fourgrams) for a given language using language id as dictionary key.
+# ex : dicts['<lang_id>'][O-1][key] first index is lang id, second index is 0 or 1, 0 is for onegrams bidict and 1 for fourgrams.
+# last key is an int for onegrams, and a string for fourgrams. for inverse access, use inverse.
+# ex dicts['en'][0][400] -> gets string of onegram at id 400
+# ex dicts['en'][0].inverse['yes'] -> gets id of onegram 'yes'
+# ex dicts['en'][1]['I do not know'] -> gets id of fourgram 'I do not know'
+# ex dicts['en'][0].inverse[400] -> gets string of fourgram at id 400
+
+
 
 if (interactive):
 
@@ -2969,11 +3081,11 @@ else:
                 inta = compressed[idx]
                        
                 if(CharIsUpperCase == 2):
-                    detokenizer.append(engdict[inta].capitalize())
+                    detokenizer.append(dicts['en'][0][inta].capitalize())
                     detokenizer_idx += 1
                     CharIsUpperCase = 0
                 else:    
-                    detokenizer.append(engdict[inta])
+                    detokenizer.append(dicts['en'][0][inta])
                     detokenizer_idx += 1
                   
                 # print to stdout
@@ -2981,7 +3093,7 @@ else:
                     detokenizer.append(" ")
                     detokenizer_idx += 1
 
-                debugw(engdict[inta])
+                debugw(dicts['en'][0][inta])
                 idx += 1
 
             elif((compressed[idx] & 128) and (not (compressed[idx+1] & 128))):
@@ -3006,18 +3118,18 @@ else:
     
                 # print word
                 if(CharIsUpperCase == 2):
-                    detokenizer.append(engdict[inta].capitalize())
+                    detokenizer.append(dicts['en'][0][inta].capitalize())
                     detokenizer_idx += 1
                     CharIsUpperCase = 0
                 else:
-                    detokenizer.append(engdict[inta])
+                    detokenizer.append(dicts['en'][0][inta])
                     detokenizer_idx += 1   
 
                 if(CharIsUpperCase != 1):
                     detokenizer.append(" ")
                     detokenizer_idx += 1 
                 
-                debugw(engdict[inta])
+                debugw(dicts['en'][0][inta])
                 # increment byte counter with step 2, we processed 2 bytes.
                 idx += 2
     
@@ -3061,7 +3173,7 @@ else:
                     debugw(inta)
                     # process ngram through ngram dictionary
                     # replace ngram code with corresponding ngram string and add them to the tokenizer
-                    ngram_string = ngram_dict_rev[inta]
+                    ngram_string = dicts['en'][1].inverse[inta]
                     debugw("ngram string:")
                     debugw(ngram_string)
                     subs = 0
@@ -3109,17 +3221,17 @@ else:
                     inta += (16384 + 128)
 
                     if(CharIsUpperCase == 2):
-                        detokenizer.append(engdict[inta].capitalize())
+                        detokenizer.append(dicts['en'][0][inta].capitalize())
                         detokenizer_idx += 1
                         CharIsUpperCase = 0
                     else:
-                        detokenizer.append(engdict[inta])
+                        detokenizer.append(dicts['en'][0][inta])
                         detokenizer_idx += 1 
                     if(CharIsUpperCase != 1):
                         detokenizer.append(" ") 
                         detokenizer_idx += 1
                     
-                    debugw(engdict[inta])
+                    debugw(dicts['en'][0][inta])
                     # increment byte counter with step 3, we processed 3 bytes.
                 idx += 3
 
@@ -3193,8 +3305,8 @@ else:
                         #stra = codec.decode(bstr)    
                     
                     debugw("we append that unknown word in our session dic at idx: " + str(unknown_token_idx) + " since it may be recalled")
-                    engdictrev[stra] = unknown_token_idx
-                    engdict[unknown_token_idx] = stra
+                    dicts['en'][0].inverse[stra] = unknown_token_idx
+                    dicts['en'][0][unknown_token_idx] = stra
                     unknown_token_idx += 1
                     
                         
@@ -3221,15 +3333,15 @@ else:
                     debugw("recalled word:")
                     
                     try:
-                        debugw(engdict[inta])
+                        debugw(dicts['en'][0][inta])
                         # print word
                     
                         if(CharIsUpperCase == 2):
-                            detokenizer.append(engdict[inta].capitalize())
+                            detokenizer.append(dicts['en'][0][inta].capitalize())
                             detokenizer_idx += 1
                             CharIsUpperCase = 0
                         else:
-                            detokenizer.append(engdict[inta])
+                            detokenizer.append(dicts['en'][0][inta])
                             detokenizer_idx += 1   
 
                         if(CharIsUpperCase != 1):
@@ -3241,8 +3353,8 @@ else:
 
                         for sessidx in range(2113664,unknown_token_idx):
                             debugw("session_index:" + str(sessidx))
-                            debugw(engdict[sessidx])
-                            debugw(engdictrev[engdict[sessidx]])
+                            debugw(dicts['en'][0][sessidx])
+                            #debugw(engdictrev[engdict[sessidx]])
                             debugw("session_index:" + str(sessidx))
                     
                     idx += 3
